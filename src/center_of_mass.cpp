@@ -34,9 +34,6 @@ REGISTER_TASKMAP_TYPE("CenterOfMass", exotica::CenterOfMass);
 
 namespace exotica
 {
-CenterOfMass::CenterOfMass() = default;
-CenterOfMass::~CenterOfMass() = default;
-
 void CenterOfMass::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi)
 {
     if (phi.rows() != dim_) ThrowNamed("Wrong size of phi!");
@@ -58,7 +55,7 @@ void CenterOfMass::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi)
     com = com / M;
     for (int i = 0; i < dim_; ++i) phi(i) = com[i];
 
-    if (debug_)
+    if (debug_ && Server::IsRos())
     {
         com_marker_.pose.position.x = phi(0);
         com_marker_.pose.position.y = phi(1);
@@ -129,7 +126,7 @@ void CenterOfMass::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, Eig
     }
     for (int i = 0; i < dim_; ++i) phi(i) = com[i];
 
-    if (debug_)
+    if (debug_ && Server::IsRos())
     {
         com_marker_.pose.position.x = phi(0);
         com_marker_.pose.position.y = phi(1);
@@ -148,7 +145,7 @@ int CenterOfMass::TaskSpaceDim()
 
 void CenterOfMass::Initialize()
 {
-    enable_z_ = init_.EnableZ;
+    enable_z_ = parameters_.EnableZ;
     if (enable_z_)
         dim_ = 3;
     else
@@ -162,23 +159,20 @@ void CenterOfMass::Initialize()
             HIGHLIGHT_NAMED("CenterOfMass", "Initialisation with " << frames_.size() << " passed into map.");
 
         mass_.resize(frames_.size());
-        for (int i = 0; i < frames_.size(); ++i)
+        for (std::size_t i = 0; i < frames_.size(); ++i)
         {
             if (frames_[i].frame_B_link_name != "")
             {
                 ThrowNamed("Requesting CenterOfMass frame with base other than root! '" << frames_[i].frame_A_link_name << "'");
             }
-            frames_[i].frame_A_link_name = scene_->GetKinematicTree().GetTreeMap()[frames_[i].frame_A_link_name].lock()->segment.getName();
-            frames_[i].frame_A_offset.p = scene_->GetKinematicTree().GetTreeMap()[frames_[i].frame_A_link_name].lock()->segment.getInertia().getCOG();
-            mass_(i) = scene_->GetKinematicTree().GetTreeMap()[frames_[i].frame_A_link_name].lock()->segment.getInertia().getMass();
+            frames_[i].frame_A_link_name = scene_->GetKinematicTree().GetTreeMap().at(frames_[i].frame_A_link_name).lock()->segment.getName();
+            frames_[i].frame_A_offset.p = scene_->GetKinematicTree().GetTreeMap().at(frames_[i].frame_A_link_name).lock()->segment.getInertia().getCOG();
+            mass_(i) = scene_->GetKinematicTree().GetTreeMap().at(frames_[i].frame_A_link_name).lock()->segment.getInertia().getMass();
         }
     }
 
-    if (debug_)
-    {
-        InitializeDebug();
-        HIGHLIGHT_NAMED("CenterOfMass", "Total model mass: " << mass_.sum() << " kg");
-    }
+    if (Server::IsRos()) InitializeDebug();
+    if (debug_) HIGHLIGHT_NAMED("CenterOfMass", "Total model mass: " << mass_.sum() << " kg");
 }
 
 void CenterOfMass::AssignScene(ScenePtr scene)
@@ -187,20 +181,15 @@ void CenterOfMass::AssignScene(ScenePtr scene)
     Initialize();
 }
 
-void CenterOfMass::Instantiate(CenterOfMassInitializer& init)
-{
-    init_ = init;
-}
-
 void CenterOfMass::InitializeDebug()
 {
     com_links_marker_.points.resize(frames_.size());
     com_links_marker_.type = visualization_msgs::Marker::SPHERE_LIST;
-    com_links_marker_.color.a = .7;
-    com_links_marker_.color.r = 0.5;
-    com_links_marker_.color.g = 0;
-    com_links_marker_.color.b = 0;
-    com_links_marker_.scale.x = com_links_marker_.scale.y = com_links_marker_.scale.z = .02;
+    com_links_marker_.color.a = .7f;
+    com_links_marker_.color.r = 0.5f;
+    com_links_marker_.color.g = 0.f;
+    com_links_marker_.color.b = 0.f;
+    com_links_marker_.scale.x = com_links_marker_.scale.y = com_links_marker_.scale.z = .02f;
     com_links_marker_.action = visualization_msgs::Marker::ADD;
 
     com_marker_.type = visualization_msgs::Marker::CYLINDER;
@@ -218,4 +207,4 @@ void CenterOfMass::InitializeDebug()
     com_links_pub_ = Server::Advertise<visualization_msgs::Marker>(object_name_ + "/com_links_marker", 1, true);
     com_pub_ = Server::Advertise<visualization_msgs::Marker>(object_name_ + "/com_marker", 1, true);
 }
-}
+}  // namespace exotica
