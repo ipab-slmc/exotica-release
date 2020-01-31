@@ -40,10 +40,11 @@ namespace exotica
 class EffAxisAlignment : public TaskMap, public Instantiable<EffAxisAlignmentInitializer>
 {
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
     EffAxisAlignment();
     virtual ~EffAxisAlignment();
 
-    void Instantiate(EffAxisAlignmentInitializer& init) override;
     void AssignScene(ScenePtr scene) override;
 
     void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi) override;
@@ -62,7 +63,6 @@ public:
 private:
     void Initialize();
 
-    EffAxisAlignmentInitializer init_;
     int n_frames_;
 
     Eigen::Matrix3Xd axis_, dir_;
