@@ -5,14 +5,13 @@ XML Initialization
 This section of the tutorial will demonstrate how to initialize EXOTica
 using XML and the related C++ code that is needed to parse the XML file.
 We will be using the XML file under the
-`IK\_Solver <https://github.com/ipab-slmc/exotica/blob/master/examples/exotica_examples/resources/configs/ik_solver_demo.xml>`__
+`IK\_Solver <https://github.com/ipab-slmc/exotica/blob/master/exotica_examples/resources/configs/example_ik.xml>`__
 file and is shown below:
 
 .. code-block:: xml
 
   <?xml version="1.0" ?>
   <IKSolverDemoConfig>
-
     <IKSolver Name="MySolver">
       <MaxIterations>1</MaxIterations>
       <MaxStep>0.1</MaxStep>
@@ -22,7 +21,6 @@ file and is shown below:
     </IKSolver>
 
     <UnconstrainedEndPoseProblem Name="MyProblem">
-
       <PlanningScene>
         <Scene>
           <JointGroup>arm</JointGroup>
@@ -42,7 +40,6 @@ file and is shown below:
       <NominalState>0 0 0 0 0 0 0</NominalState>
       <W> 7 6 5 4 3 2 1 </W>
     </UnconstrainedEndPoseProblem>
-
   </IKSolverDemoConfig>
 
 
@@ -72,7 +69,7 @@ Solver options are then specified:
       <C>1e-3</C>
 
 The parameters in this case are optional, but each solver has its own 
-set of initialization parameters, as detailed on the `previous page <Initialisation.html>`__
+set of initialization parameters, as detailed on the `previous page <initialization.html>`__
 and the function of each can be found in the literature.
 
 Problem Setup
@@ -90,8 +87,8 @@ Planning Scene
 ==============
 
 A ``PlanningScene`` always contains:
- * `URDF <https://github.com/ipab-slmc/exotica/blob/master/examples/exotica_examples/resources/robots/lwr_simplified.urdf>`__
- * `SRDF <https://github.com/ipab-slmc/exotica/blob/master/examples/exotica_examples/resources/robots/lwr_simplified.srdf>`__
+ * `URDF <https://github.com/ipab-slmc/exotica/blob/master/exotica_examples/resources/robots/lwr_simplified.urdf>`__
+ * `SRDF <https://github.com/ipab-slmc/exotica/blob/master/exotica_examples/resources/robots/lwr_simplified.srdf>`__
  * ``JointGroup`` which corresponds to the planning group specified in the SRDF file, the part we are interested in is detailed below:
 
 .. code-block:: xml
