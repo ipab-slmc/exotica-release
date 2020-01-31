@@ -48,9 +48,9 @@ std_msgs::ColorRGBA RandomColor()
     std::random_device rd_;
     std::mt19937 gen(rd_());
     std::uniform_real_distribution<> dis(0.0, 1.0);
-    ret.r = dis(gen);
-    ret.g = dis(gen);
-    ret.b = dis(gen);
+    ret.r = static_cast<float>(dis(gen));
+    ret.g = static_cast<float>(dis(gen));
+    ret.b = static_cast<float>(dis(gen));
     return ret;
 }
 
@@ -115,24 +115,6 @@ void LoadOBJ(const std::string& data, Eigen::VectorXi& tri,
     }
 }
 
-void GetText(std::string& txt, KDL::Frame& ret)
-{
-    std::vector<std::string> strs;
-    boost::split(strs, txt, boost::is_any_of(" "));
-    if (strs.size() != 7)
-    {
-        ThrowPretty("Not a frame! " << txt);
-    }
-
-    std::vector<double> doubleVector(strs.size());
-    std::transform(strs.begin(), strs.end(), doubleVector.begin(), [](const std::string& val) {
-        return std::stod(val);
-    });
-
-    ret.p = KDL::Vector(doubleVector[0], doubleVector[1], doubleVector[2]);
-    ret.M = KDL::Rotation::Quaternion(doubleVector[4], doubleVector[5], doubleVector[6], doubleVector[3]);
-}
-
 std::string GetTypeName(const std::type_info& type)
 {
     int status;
@@ -159,6 +141,22 @@ std::string ParsePath(const std::string& path)
         try
         {
             ret = std::regex_replace(ret, std::regex("\\{" + package + "\\}"), package_path, std::regex_constants::match_any);
+        }
+        catch (const std::regex_error& e)
+        {
+            ThrowPretty("Package name resolution failed (regex error " << e.code() << ")");
+        }
+    }
+    std::regex_search(ret, matches, std::regex("package://([^\\/]+){1,}"));
+    for (auto& match : matches)
+    {
+        std::string package = match.str();
+        if (package.substr(0, 10) == "package://" || package == "") continue;
+        std::string package_path = ros::package::getPath(package);
+        if (package_path == "") ThrowPretty("Unknown package '" << package << "'");
+        try
+        {
+            ret = std::regex_replace(ret, std::regex("package://" + package + "/"), package_path + "/", std::regex_constants::match_any);
         }
         catch (const std::regex_error& e)
         {
