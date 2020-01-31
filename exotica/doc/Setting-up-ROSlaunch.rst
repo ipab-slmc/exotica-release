@@ -9,7 +9,7 @@ Using ROSlaunch to launch your EXOTica script makes locating
 your URDF and SRDF files and keeping everything together much easier.
 
 As we can see in the roslaunch file for the manually initialized example
-`here <https://github.com/ipab-slmc/exotica/blob/master/examples/exotica_examples/launch/CppInitManual.launch>`__
+`here <https://github.com/ipab-slmc/exotica/blob/master/exotica_examples/launch/cpp_init_generic.launch>`__
 and seen below, there are a few essential elements to constructing an EXOTica
 ROSlaunch file.
 
@@ -17,16 +17,16 @@ ROSlaunch file.
 
     <launch>
 
-    <arg name="debug" default="false" />
-    <arg unless="$(arg debug)" name="launch_prefix" value="" />
-    <arg     if="$(arg debug)" name="launch_prefix" value="xterm -e gdb --args" />
+        <arg name="debug" default="false" />
+        <arg unless="$(arg debug)" name="launch_prefix" value="" />
+        <arg     if="$(arg debug)" name="launch_prefix" value="xterm -e gdb --args" />
 
-    <param name="robot_description" textfile="$(find exotica_examples)/resources/robots/lwr_simplified.urdf" />
-    <param name="robot_description_semantic" textfile="$(find exotica_examples)/resources/robots/lwr_simplified.srdf" />
+        <param name="robot_description" textfile="$(find exotica_examples)/resources/robots/lwr_simplified.urdf" />
+        <param name="robot_description_semantic" textfile="$(find exotica_examples)/resources/robots/lwr_simplified.srdf" />
 
-    <node launch-prefix="$(arg launch_prefix)" pkg="exotica_examples" type="ManualInitialization" name="ExoticaManualInitializationExampleNode" output="screen" />
+        <node launch-prefix="$(arg launch_prefix)" pkg="exotica_examples" type="ManualInitialization" name="ExoticaManualInitializationExampleNode" output="screen" />
 
-    <node name="rviz" pkg="rviz" type="rviz" respawn="false" args="-d $(find exotica_examples)/resources/rviz.rviz" />
+        <node name="rviz" pkg="rviz" type="rviz" respawn="false" args="-d $(find exotica_examples)/resources/rviz.rviz" />
     </launch>
 
 .. rubric:: CODE EXPLAINED
@@ -105,7 +105,7 @@ XML Parameters
 ==============
 
 When initializing with XML, ROSlaunch needs to broadcast a ROSparam 
-specifying the name of the configuration file (Here we're looking at the `XML launch file <https://github.com/ipab-slmc/exotica/blob/master/examples/exotica_examples/launch/CppInitManual.launch>`__):
+specifying the name of the configuration file (Here we're looking at the `XML launch file <https://github.com/ipab-slmc/exotica/blob/master/exotica_examples/launch/cpp_init_generic.launch>`__):
 
 .. code-block:: xml
 
