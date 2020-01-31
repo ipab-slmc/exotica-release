@@ -29,6 +29,7 @@
 
 #include <type_traits>
 
+#include <exotica_core/dynamics_solver.h>
 #include <exotica_core/scene.h>
 #include <exotica_core/server.h>
 #include <exotica_core/setup.h>
@@ -48,31 +49,37 @@ void Setup::PrintSupportedClasses()
 {
     HIGHLIGHT("Registered solvers:");
     std::vector<std::string> solvers = Instance()->solvers_.getDeclaredClasses();
-    for (std::string s : solvers)
+    for (const std::string& s : solvers)
     {
         HIGHLIGHT(" '" << s << "'");
     }
     HIGHLIGHT("Registered problems:");
     std::vector<std::string> problems = Instance()->problems_.GetDeclaredClasses();
-    for (std::string s : problems)
+    for (const std::string& s : problems)
     {
         HIGHLIGHT(" '" << s << "'");
     }
     HIGHLIGHT("Registered task maps:");
     std::vector<std::string> maps = Instance()->maps_.getDeclaredClasses();
-    for (std::string s : maps)
+    for (const std::string& s : maps)
     {
         HIGHLIGHT(" '" << s << "'");
     }
     HIGHLIGHT("Registered collision scenes:");
-    std::vector<std::string> scenes = Instance()->scenes_.getDeclaredClasses();
-    for (std::string s : scenes)
+    std::vector<std::string> scenes = Instance()->collision_scenes_.getDeclaredClasses();
+    for (const std::string& s : scenes)
+    {
+        HIGHLIGHT(" '" << s << "'");
+    }
+    HIGHLIGHT("Registered dynamics solvers:");
+    std::vector<std::string> dynamics_solvers = Instance()->dynamics_solvers_.getDeclaredClasses();
+    for (const std::string& s : dynamics_solvers)
     {
         HIGHLIGHT(" '" << s << "'");
     }
 }
 
-void appendInit(std::shared_ptr<InstantiableBase> it, std::vector<Initializer>& ret)
+void AppendInitializer(std::shared_ptr<InstantiableBase> it, std::vector<Initializer>& ret)
 {
     std::vector<Initializer> temps = it->GetAllTemplates();
     for (Initializer& i : temps)
@@ -97,14 +104,19 @@ std::vector<Initializer> Setup::GetInitializers()
 {
     std::vector<Initializer> ret = Scene().GetAllTemplates();
     std::vector<std::string> solvers = Instance()->solvers_.getDeclaredClasses();
-    for (std::string s : solvers)
+    for (const std::string& s : solvers)
     {
-        appendInit(std::static_pointer_cast<InstantiableBase>(CreateSolver(s, false)), ret);
+        AppendInitializer(std::static_pointer_cast<InstantiableBase>(CreateSolver(s, false)), ret);
     }
     std::vector<std::string> maps = Instance()->maps_.getDeclaredClasses();
-    for (std::string s : maps)
+    for (const std::string& s : maps)
     {
-        appendInit(std::static_pointer_cast<InstantiableBase>(CreateMap(s, false)), ret);
+        AppendInitializer(std::static_pointer_cast<InstantiableBase>(CreateMap(s, false)), ret);
+    }
+    std::vector<std::string> dynamics_solvers = Instance()->dynamics_solvers_.getDeclaredClasses();
+    for (const std::string& s : dynamics_solvers)
+    {
+        AppendInitializer(std::static_pointer_cast<InstantiableBase>(CreateDynamicsSolver(s, false)), ret);
     }
     return ret;
 }
@@ -112,8 +124,13 @@ std::vector<Initializer> Setup::GetInitializers()
 std::vector<std::string> Setup::GetSolvers() { return Instance()->solvers_.getDeclaredClasses(); }
 std::vector<std::string> Setup::GetProblems() { return Instance()->problems_.GetDeclaredClasses(); }
 std::vector<std::string> Setup::GetMaps() { return Instance()->maps_.getDeclaredClasses(); }
-std::vector<std::string> Setup::GetCollisionScenes() { return Instance()->scenes_.getDeclaredClasses(); }
-Setup::Setup() : solvers_("exotica_core", "exotica::MotionSolver"), maps_("exotica_core", "exotica::TaskMap"), problems_(PlanningProblemFac::Instance()), scenes_("exotica_core", "exotica::CollisionScene")
+std::vector<std::string> Setup::GetCollisionScenes() { return Instance()->collision_scenes_.getDeclaredClasses(); }
+std::vector<std::string> Setup::GetDynamicsSolvers() { return Instance()->dynamics_solvers_.getDeclaredClasses(); }
+Setup::Setup() : solvers_("exotica_core", "exotica::MotionSolver"),
+                 maps_("exotica_core", "exotica::TaskMap"),
+                 problems_(PlanningProblemFac::Instance()),
+                 collision_scenes_("exotica_core", "exotica::CollisionScene"),
+                 dynamics_solvers_("exotica_core", "exotica::DynamicsSolver")
 {
 }
-}
+}  // namespace exotica
