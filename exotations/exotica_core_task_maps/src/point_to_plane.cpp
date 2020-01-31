@@ -35,10 +35,7 @@ REGISTER_TASKMAP_TYPE("PointToPlane", exotica::PointToPlane);
 
 namespace exotica
 {
-PointToPlane::PointToPlane() = default;
-PointToPlane::~PointToPlane() = default;
-
-void PointToPlane::Instantiate(PointToPlaneInitializer& init)
+void PointToPlane::Instantiate(const PointToPlaneInitializer& init)
 {
     if (debug_ && Server::IsRos())
     {
@@ -53,7 +50,7 @@ void PointToPlane::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi)
 
     for (int i = 0; i < kinematics[0].Phi.rows(); ++i)
     {
-        const auto& point = Eigen::Map<const Eigen::Vector3d>(kinematics[0].Phi(i).p.data);
+        Eigen::Map<const Eigen::Vector3d> point = Eigen::Map<const Eigen::Vector3d>(kinematics[0].Phi(i).p.data);
         phi(i) = Eigen::Vector3d::UnitZ().dot(point);
     }
 
@@ -69,13 +66,13 @@ void PointToPlane::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, Eig
 
     for (int i = 0; i < kinematics[0].Phi.rows(); ++i)
     {
-        const auto& point = Eigen::Map<const Eigen::Vector3d>(kinematics[0].Phi(i).p.data);
+        Eigen::Map<const Eigen::Vector3d> point = Eigen::Map<const Eigen::Vector3d>(kinematics[0].Phi(i).p.data);
 
         phi(i) = Eigen::Vector3d::UnitZ().dot(point);
 
         for (int j = 0; j < jacobian.cols(); ++j)
         {
-            const auto& dpoint = Eigen::Map<const Eigen::Vector3d>(kinematics[0].jacobian[i].getColumn(j).vel.data);
+            Eigen::Map<const Eigen::Vector3d> dpoint = Eigen::Map<const Eigen::Vector3d>(kinematics[0].jacobian[i].getColumn(j).vel.data);
             jacobian(i, j) = Eigen::Vector3d::UnitZ().dot(dpoint);
         }
     }
@@ -102,13 +99,13 @@ void PointToPlane::PublishDebug()
         plane.type = plane.CUBE;
         plane.action = plane.ADD;
         plane.frame_locked = true;
-        plane.color.g = 1.0;
-        plane.color.a = 0.8;
+        plane.color.g = 1.0f;
+        plane.color.a = 0.8f;
         tf::poseKDLToMsg(frames_[i].frame_B_offset, plane.pose);
 
-        plane.scale.x = 10;
-        plane.scale.y = 10;
-        plane.scale.z = 0.01;
+        plane.scale.x = 10.f;
+        plane.scale.y = 10.f;
+        plane.scale.z = 0.01f;
         plane.pose.position.z -= (plane.scale.z / 2);
 
         msg.markers.push_back(plane);
