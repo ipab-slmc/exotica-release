@@ -33,14 +33,6 @@ REGISTER_TASKMAP_TYPE("JointLimit", exotica::JointLimit);
 
 namespace exotica
 {
-JointLimit::JointLimit() = default;
-JointLimit::~JointLimit() = default;
-
-void JointLimit::Instantiate(JointLimitInitializer& init)
-{
-    init_ = init;
-}
-
 void JointLimit::AssignScene(ScenePtr scene)
 {
     scene_ = scene;
@@ -49,8 +41,7 @@ void JointLimit::AssignScene(ScenePtr scene)
 
 void JointLimit::Initialize()
 {
-    safe_percentage_ = init_.SafePercentage;
-
+    safe_percentage_ = parameters_.SafePercentage;
     N = scene_->GetKinematicTree().GetNumControlledJoints();
 }
 
@@ -83,4 +74,4 @@ void JointLimit::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, Eigen
     if (jacobian.rows() != N || jacobian.cols() != N) ThrowNamed("Wrong size of jacobian! " << N);
     jacobian = Eigen::MatrixXd::Identity(N, N);
 }
-}
+}  // namespace exotica

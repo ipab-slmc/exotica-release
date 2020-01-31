@@ -34,13 +34,10 @@ REGISTER_TASKMAP_TYPE("SphereCollision", exotica::SphereCollision);
 
 namespace exotica
 {
-SphereCollision::SphereCollision() = default;
-SphereCollision::~SphereCollision() = default;
-
-void SphereCollision::Instantiate(SphereCollisionInitializer& init)
+void SphereCollision::Instantiate(const SphereCollisionInitializer& init)
 {
     eps_ = 1.0 / init.Precision;
-    for (int i = 0; i < init.EndEffector.size(); ++i)
+    for (std::size_t i = 0; i < init.EndEffector.size(); ++i)
     {
         SphereInitializer sphere(init.EndEffector[i]);
         groups_[sphere.Group].push_back(i);
@@ -56,7 +53,7 @@ void SphereCollision::Instantiate(SphereCollisionInitializer& init)
     for (auto& it : groups_)
     {
         std_msgs::ColorRGBA col = RandomColor();
-        col.a = init.Alpha;
+        col.a = static_cast<float>(init.Alpha);
         for (int i : it.second)
         {
             debug_msg_.markers[i].color = col;
@@ -64,10 +61,12 @@ void SphereCollision::Instantiate(SphereCollisionInitializer& init)
         }
     }
 
-    if (debug_)
+    if (Server::IsRos())
     {
         debug_pub_ = Server::Advertise<visualization_msgs::MarkerArray>(ns_ + "/CollisionSpheres", 1, true);
     }
+
+    dim_ = groups_.size() * (groups_.size() - 1) / 2;
 }
 
 double SphereCollision::Distance(const KDL::Frame& eff_A, const KDL::Frame& eff_B, double r_A, double r_B)
@@ -77,15 +76,13 @@ double SphereCollision::Distance(const KDL::Frame& eff_A, const KDL::Frame& eff_
 
 Eigen::VectorXd SphereCollision::Jacobian(const KDL::Frame& eff_A, const KDL::Frame& eff_B, const KDL::Jacobian& jacA, const KDL::Jacobian& jacB, double r_A, double r_B)
 {
-    int n = jacA.columns();
+    const int n = jacA.columns();
     Eigen::VectorXd ret = Eigen::VectorXd::Zero(n);
-    Eigen::VectorXd eA(3);
-    Eigen::VectorXd eB(3);
+    const Eigen::Vector3d eA_minus_eB = Eigen::Map<const Eigen::Vector3d>(eff_A.p.data) - Eigen::Map<const Eigen::Vector3d>(eff_B.p.data);
+    const double eA_minus_eB_norm = eA_minus_eB.norm();
     for (int i = 0; i < n; ++i)
     {
-        eA << eff_A.p[0], eff_A.p[1], eff_A.p[2];
-        eB << eff_B.p[0], eff_B.p[1], eff_B.p[2];
-        ret(i) = -static_cast<double>((jacA.data.col(i).head(3) - jacB.data.col(i).head(3)).adjoint() * (eA - eB)) / (eff_A.p - eff_B.p).Norm();
+        ret(i) = -static_cast<double>((jacA.data.col(i).head<3>() - jacB.data.col(i).head<3>()).adjoint() * eA_minus_eB) / eA_minus_eB_norm;
     }
     return ret;
 }
@@ -102,9 +99,9 @@ void SphereCollision::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi)
     {
         for (auto B = std::next(A); B != Bend; ++B)
         {
-            for (int ii = 0; ii < A->second.size(); ++ii)
+            for (std::size_t ii = 0; ii < A->second.size(); ++ii)
             {
-                for (int jj = 0; jj < B->second.size(); ++jj)
+                for (std::size_t jj = 0; jj < B->second.size(); ++jj)
                 {
                     int i = A->second[ii];
                     int j = B->second[jj];
@@ -115,9 +112,9 @@ void SphereCollision::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi)
         }
     }
 
-    if (debug_)
+    if (debug_ && Server::IsRos())
     {
-        for (int i = 0; i < debug_msg_.markers.size(); ++i)
+        for (std::size_t i = 0; i < debug_msg_.markers.size(); ++i)
         {
             debug_msg_.markers[i].pose.position.x = kinematics[0].Phi(i).p[0];
             debug_msg_.markers[i].pose.position.y = kinematics[0].Phi(i).p[1];
@@ -141,9 +138,9 @@ void SphereCollision::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, 
     {
         for (auto B = std::next(A); B != Bend; ++B)
         {
-            for (int ii = 0; ii < A->second.size(); ++ii)
+            for (std::size_t ii = 0; ii < A->second.size(); ++ii)
             {
-                for (int jj = 0; jj < B->second.size(); ++jj)
+                for (std::size_t jj = 0; jj < B->second.size(); ++jj)
                 {
                     int i = A->second[ii];
                     int j = B->second[jj];
@@ -155,9 +152,9 @@ void SphereCollision::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, 
         }
     }
 
-    if (debug_)
+    if (debug_ && Server::IsRos())
     {
-        for (int i = 0; i < debug_msg_.markers.size(); ++i)
+        for (std::size_t i = 0; i < debug_msg_.markers.size(); ++i)
         {
             debug_msg_.markers[i].pose.position.x = kinematics[0].Phi(i).p[0];
             debug_msg_.markers[i].pose.position.y = kinematics[0].Phi(i).p[1];
@@ -169,6 +166,6 @@ void SphereCollision::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, 
 
 int SphereCollision::TaskSpaceDim()
 {
-    return groups_.size() * (groups_.size() - 1) / 2;
+    return dim_;
 }
-}
+}  // namespace exotica
