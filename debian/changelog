@@ -1,0 +1,7 @@
+ros-melodic-exotica-cartpole-dynamics-solver (5.1.0-1stretch) stretch; urgency=high
+
+  * Add exotica_cartpole_dynamics_solver
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Fri, 31 Jan 2020 00:00:00 -0000
+
+
