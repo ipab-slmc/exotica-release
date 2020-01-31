@@ -29,6 +29,7 @@
 
 #include <exotica_ompl_solver/ompl_solver.h>
 
+#include <ompl/util/Console.h>
 #include <ompl/util/RandomNumbers.h>
 
 namespace exotica
@@ -44,14 +45,14 @@ void OMPLSolver<ProblemType>::SpecifyProblem(PlanningProblemPtr pointer)
 {
     MotionSolver::SpecifyProblem(pointer);
     prob_ = std::static_pointer_cast<ProblemType>(pointer);
-    if (prob_->GetScene()->GetBaseType() == BaseType::FIXED)
+    if (prob_->GetScene()->GetKinematicTree().GetControlledBaseType() == BaseType::FIXED)
         state_space_.reset(new OMPLRNStateSpace(init_));
-    else if (prob_->GetScene()->GetBaseType() == BaseType::PLANAR)
-        state_space_.reset(new OMPLSE2RNStateSpace(init_));
-    else if (prob_->GetScene()->GetBaseType() == BaseType::FLOATING)
+    else if (prob_->GetScene()->GetKinematicTree().GetControlledBaseType() == BaseType::PLANAR)
+        state_space_.reset(new OMPLRNStateSpace(init_));  // NB: We have a dedicated OMPLSE2RNStateSpace, however, for now we cannot set orientation bounds on it - as thus we are using the RN here. Cf. issue #629.
+    else if (prob_->GetScene()->GetKinematicTree().GetControlledBaseType() == BaseType::FLOATING)
         state_space_.reset(new OMPLSE3RNStateSpace(init_));
     else
-        ThrowNamed("Unsupported base type " << prob_->GetScene()->GetBaseType());
+        ThrowNamed("Unsupported base type " << prob_->GetScene()->GetKinematicTree().GetControlledBaseType());
     ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(state_space_));
     ompl_simple_setup_->setStateValidityChecker(ompl::base::StateValidityCheckerPtr(new OMPLStateValidityChecker(ompl_simple_setup_->getSpaceInformation(), prob_)));
     ompl_simple_setup_->setPlannerAllocator(boost::bind(planner_allocator_, _1, algorithm_));
@@ -64,11 +65,11 @@ void OMPLSolver<ProblemType>::SpecifyProblem(PlanningProblemPtr pointer)
             project_vars[i] = (int)init_.Projection(i);
             if (project_vars[i] < 0 || project_vars[i] >= prob_->N) ThrowNamed("Invalid projection index! " << project_vars[i]);
         }
-        if (prob_->GetScene()->GetBaseType() == BaseType::FIXED)
+        if (prob_->GetScene()->GetKinematicTree().GetControlledBaseType() == BaseType::FIXED)
             ompl_simple_setup_->getStateSpace()->registerDefaultProjection(ompl::base::ProjectionEvaluatorPtr(new OMPLRNProjection(state_space_, project_vars)));
-        else if (prob_->GetScene()->GetBaseType() == BaseType::PLANAR)
+        else if (prob_->GetScene()->GetKinematicTree().GetControlledBaseType() == BaseType::PLANAR)
             ompl_simple_setup_->getStateSpace()->registerDefaultProjection(ompl::base::ProjectionEvaluatorPtr(new OMPLSE2RNProjection(state_space_, project_vars)));
-        else if (prob_->GetScene()->GetBaseType() == BaseType::FLOATING)
+        else if (prob_->GetScene()->GetKinematicTree().GetControlledBaseType() == BaseType::FLOATING)
             ompl_simple_setup_->getStateSpace()->registerDefaultProjection(ompl::base::ProjectionEvaluatorPtr(new OMPLSE3RNProjection(state_space_, project_vars)));
     }
 }
@@ -100,7 +101,7 @@ void OMPLSolver<ProblemType>::PostSolve()
     ompl_simple_setup_->clearStartStates();
     int v = ompl_simple_setup_->getSpaceInformation()->getMotionValidator()->getValidMotionCount();
     int iv = ompl_simple_setup_->getSpaceInformation()->getMotionValidator()->getInvalidMotionCount();
-    CONSOLE_BRIDGE_logDebug("There were %d valid motions and %d invalid motions.", v, iv);
+    if (debug_) CONSOLE_BRIDGE_logDebug("There were %d valid motions and %d invalid motions.", v, iv);
 
     if (ompl_simple_setup_->getProblemDefinition()->hasApproximateSolution())
         CONSOLE_BRIDGE_logWarn("Computed solution is approximate");
@@ -121,10 +122,11 @@ void OMPLSolver<ProblemType>::SetGoalState(Eigen::VectorXdRefConst qT, const dou
         state_space_->as<OMPLStateSpace>()->StateDebug(qT);
 
         // Debug state and bounds
+        auto bounds = prob_->GetBounds();
         std::string out_of_bounds_joint_ids = "";
         for (int i = 0; i < qT.rows(); ++i)
-            if (qT(i) < prob_->GetBounds()[i] || qT(i) > prob_->GetBounds()[i + qT.rows()])
-                out_of_bounds_joint_ids += "[j" + std::to_string(i) + "=" + std::to_string(qT(i)) + ", ll=" + std::to_string(prob_->GetBounds()[i]) + ", ul=" + std::to_string(prob_->GetBounds()[i + qT.rows()]) + "]\n";
+            if (qT(i) < bounds[i] || qT(i) > bounds[i + qT.rows()])
+                out_of_bounds_joint_ids += "[j" + std::to_string(i) + "=" + std::to_string(qT(i)) + ", ll=" + std::to_string(bounds[i]) + ", ul=" + std::to_string(bounds[i + qT.rows()]) + "]\n";
 
         ThrowNamed("Invalid goal state [Invalid joint bounds for joint indices: \n"
                    << out_of_bounds_joint_ids << "]");
@@ -187,6 +189,9 @@ void OMPLSolver<ProblemType>::GetPath(Eigen::MatrixXd &traj, ompl::base::Planner
 template <class ProblemType>
 void OMPLSolver<ProblemType>::Solve(Eigen::MatrixXd &solution)
 {
+    // Set log level
+    ompl::msg::setLogLevel(debug_ ? ompl::msg::LogLevel::LOG_DEBUG : ompl::msg::LogLevel::LOG_WARN);
+
     Eigen::VectorXd q0 = prob_->ApplyStartState();
 
     // check joint limits
@@ -224,10 +229,10 @@ void OMPLSolver<ProblemType>::Solve(Eigen::MatrixXd &solution)
     if (ompl_simple_setup_->getPlanner()->params().hasParam("GoalBias"))
         ompl_simple_setup_->getPlanner()->params().setParam("GoalBias", init_.GoalBias);
 
-    if (init_.RandomSeed != -1)
+    if (init_.RandomSeed > -1)
     {
         HIGHLIGHT_NAMED(algorithm_, "Setting random seed to " << init_.RandomSeed);
-        ompl::RNG::setSeed(init_.RandomSeed);
+        ompl::RNG::setSeed(static_cast<long unsigned int>(init_.RandomSeed));
     }
 
     SetGoalState(prob_->GetGoalState(), init_.Epsilon);
@@ -240,10 +245,13 @@ void OMPLSolver<ProblemType>::Solve(Eigen::MatrixXd &solution)
     PreSolve();
     ompl::time::point start = ompl::time::now();
     ompl::base::PlannerTerminationCondition ptc = ompl::base::timedPlannerTerminationCondition(init_.Timeout - ompl::time::seconds(ompl::time::now() - start));
+
+    Timer t;
     if (ompl_simple_setup_->solve(ptc) == ompl::base::PlannerStatus::EXACT_SOLUTION && ompl_simple_setup_->haveSolutionPath())
     {
         GetPath(solution, ptc);
     }
+    planning_time_ = t.GetDuration();
     PostSolve();
 }
 

@@ -56,7 +56,7 @@ std::vector<double> TimeIndexedSamplingProblem::GetBounds()
     return bounds;
 }
 
-void TimeIndexedSamplingProblem::Instantiate(TimeIndexedSamplingProblemInitializer& init)
+void TimeIndexedSamplingProblem::Instantiate(const TimeIndexedSamplingProblemInitializer& init)
 {
     parameters = init;
 
@@ -113,15 +113,15 @@ void TimeIndexedSamplingProblem::Instantiate(TimeIndexedSamplingProblemInitializ
 
     ApplyStartState(false);
 
-    if (scene_->GetBaseType() != exotica::BaseType::FIXED && init.FloatingBaseLowerLimits.rows() > 0 && init.FloatingBaseUpperLimits.rows() > 0)
+    if (scene_->GetKinematicTree().GetControlledBaseType() != exotica::BaseType::FIXED && init.FloatingBaseLowerLimits.rows() > 0 && init.FloatingBaseUpperLimits.rows() > 0)
     {
-        if (scene_->GetBaseType() == exotica::BaseType::FLOATING && init.FloatingBaseLowerLimits.rows() == 6 && init.FloatingBaseUpperLimits.rows() == 6)
+        if (scene_->GetKinematicTree().GetControlledBaseType() == exotica::BaseType::FLOATING && init.FloatingBaseLowerLimits.rows() == 6 && init.FloatingBaseUpperLimits.rows() == 6)
         {
             scene_->GetKinematicTree().SetFloatingBaseLimitsPosXYZEulerZYX(
                 std::vector<double>(init.FloatingBaseLowerLimits.data(), init.FloatingBaseLowerLimits.data() + init.FloatingBaseLowerLimits.size()),
                 std::vector<double>(init.FloatingBaseUpperLimits.data(), init.FloatingBaseUpperLimits.data() + init.FloatingBaseUpperLimits.size()));
         }
-        else if (scene_->GetBaseType() == exotica::BaseType::PLANAR && init.FloatingBaseLowerLimits.rows() == 3 && init.FloatingBaseUpperLimits.rows() == 3)
+        else if (scene_->GetKinematicTree().GetControlledBaseType() == exotica::BaseType::PLANAR && init.FloatingBaseLowerLimits.rows() == 3 && init.FloatingBaseUpperLimits.rows() == 3)
         {
             scene_->GetKinematicTree().SetPlanarBaseLimitsPosXYEulerZ(
                 std::vector<double>(init.FloatingBaseLowerLimits.data(), init.FloatingBaseLowerLimits.data() + init.FloatingBaseLowerLimits.size()),
