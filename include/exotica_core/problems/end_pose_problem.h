@@ -44,7 +44,7 @@ public:
     EndPoseProblem();
     virtual ~EndPoseProblem();
 
-    virtual void Instantiate(EndPoseProblemInitializer& init);
+    virtual void Instantiate(const EndPoseProblemInitializer& init);
     void Update(Eigen::VectorXdRefConst x);
     bool IsValid() override;
 
@@ -64,8 +64,8 @@ public:
     Eigen::MatrixXd GetBounds() const;
 
     double GetScalarCost();
-    Eigen::VectorXd GetScalarJacobian();
-    double GetScalarTaskCost(const std::string& task_name);
+    Eigen::RowVectorXd GetScalarJacobian();
+    double GetScalarTaskCost(const std::string& task_name) const;
     Eigen::VectorXd GetEquality();
     Eigen::MatrixXd GetEqualityJacobian();
     Eigen::VectorXd GetInequality();
@@ -84,8 +84,6 @@ public:
     int length_jacobian;
     int num_tasks;
     bool use_bounds;
-
-    EndPoseProblemInitializer parameters;
 };
 typedef std::shared_ptr<exotica::EndPoseProblem> EndPoseProblemPtr;
 }
