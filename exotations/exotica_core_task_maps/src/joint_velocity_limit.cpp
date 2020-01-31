@@ -40,11 +40,6 @@ JointVelocityLimit::JointVelocityLimit()
 
 JointVelocityLimit::~JointVelocityLimit() = default;
 
-void JointVelocityLimit::Instantiate(JointVelocityLimitInitializer& init)
-{
-    init_ = init;
-}
-
 void JointVelocityLimit::AssignScene(ScenePtr scene)
 {
     scene_ = scene;
@@ -53,25 +48,25 @@ void JointVelocityLimit::AssignScene(ScenePtr scene)
 
 void JointVelocityLimit::Initialize()
 {
-    double percent = static_cast<double>(init_.SafePercentage);
+    double percent = static_cast<double>(parameters_.SafePercentage);
 
     N = scene_->GetKinematicTree().GetNumControlledJoints();
-    dt_ = std::abs(init_.dt);
+    dt_ = std::abs(parameters_.dt);
     if (dt_ == 0.0)
         ThrowNamed("Timestep dt needs to be greater than 0");
 
-    if (init_.MaximumJointVelocity.rows() == 1)
+    if (parameters_.MaximumJointVelocity.rows() == 1)
     {
         limits_.setOnes(N);
-        limits_ *= std::abs(static_cast<double>(init_.MaximumJointVelocity(0)));
+        limits_ *= std::abs(static_cast<double>(parameters_.MaximumJointVelocity(0)));
     }
-    else if (init_.MaximumJointVelocity.rows() == N)
+    else if (parameters_.MaximumJointVelocity.rows() == N)
     {
-        limits_ = init_.MaximumJointVelocity.cwiseAbs();
+        limits_ = parameters_.MaximumJointVelocity.cwiseAbs();
     }
     else
     {
-        ThrowNamed("Maximum joint velocity vector needs to be either of size 1 or N, but got " << init_.MaximumJointVelocity.rows());
+        ThrowNamed("Maximum joint velocity vector needs to be either of size 1 or N, but got " << parameters_.MaximumJointVelocity.rows());
     }
 
     tau_ = percent * limits_;
@@ -88,7 +83,7 @@ void JointVelocityLimit::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef ph
 {
     if (kinematics.size() != 2) ThrowNamed("Wrong size of kinematics - requires 2, but got " << kinematics.size());
     if (phi.rows() != N) ThrowNamed("Wrong size of phi!");
-    if (!x.isApprox(kinematics[0].X)) ThrowNamed("The internal kinematics.X and passed state reference x do not match!");
+    if (!x.isApprox(kinematics[0].X)) ThrowNamed("The internal kinematics.X and passed state reference x do not match!\n x=" << std::setprecision(6) << x.transpose() << "\n X=" << kinematics[0].X.transpose() << "\n diff=" << (x - kinematics[0].X).transpose());
 
     phi.setZero();
     Eigen::VectorXd x_diff = (1 / dt_) * (kinematics[0].X - kinematics[1].X);

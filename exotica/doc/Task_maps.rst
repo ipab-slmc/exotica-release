@@ -18,6 +18,7 @@ Initializing task maps
 Each task map needs to be initialized first, this sets up the task map and specifies any important parameters. After initialization we can send the the task map to 
 the problem. 
 
+.._initializing-com-task-map:
 CoM 
 ---
 
@@ -141,6 +142,7 @@ Using Task Maps
 Once we've chosen and initialized the task maps we're interested in they need to be sent to the problem. The problem then informs the solver that these things must be taken into
 consideration when producing a motion plan. Each problem can handle one of many task maps. Let's look at how we send these to the problem. 
 
+.._using-task-maps-cpp:
 C++
 ---
 
@@ -155,7 +157,7 @@ the curly brackets ``{map}``. In this snippet we assume you have already created
     UnconstrainedEndPoseProblemInitializer problem("MyProblem", scene, false, {map}, W);
 
 By placing multiple map variable names inside these curly brackets, we can specify several maps to be sent to the same problem (this sets joint limits for the 
-`LWR_simplified <https://github.com/ipab-slmc/exotica/blob/master/examples/exotica_examples/resources/robots/lwr_simplified.urdf>`__  arm in the examples):
+`LWR_simplified <https://github.com/ipab-slmc/exotica/blob/master/exotica_examples/resources/robots/lwr_simplified.urdf>`__  arm in the examples):
 
 .. code-block:: cpp
 
