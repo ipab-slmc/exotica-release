@@ -38,24 +38,19 @@ namespace exotica
 EffAxisAlignment::EffAxisAlignment() = default;
 EffAxisAlignment::~EffAxisAlignment() = default;
 
-void EffAxisAlignment::Instantiate(EffAxisAlignmentInitializer& init)
-{
-    init_ = init;
-}
-
 void EffAxisAlignment::Initialize()
 {
     N = scene_->GetKinematicTree().GetNumControlledJoints();
 
-    n_frames_ = init_.EndEffector.size();
+    n_frames_ = parameters_.EndEffector.size();
     if (debug_) HIGHLIGHT_NAMED("EffAxisAlignment", "Number of EndEffectors: " << n_frames_);
     axis_.resize(3, n_frames_);
     dir_.resize(3, n_frames_);
 
     frames_.resize(2 * n_frames_);
-    for (unsigned int i = 0; i < n_frames_; ++i)
+    for (int i = 0; i < n_frames_; ++i)
     {
-        FrameWithAxisAndDirectionInitializer frame(init_.EndEffector[i]);
+        FrameWithAxisAndDirectionInitializer frame(parameters_.EndEffector[i]);
         axis_.col(i) = frame.Axis.normalized();
         dir_.col(i) = frame.Direction.normalized();
 
@@ -65,7 +60,7 @@ void EffAxisAlignment::Initialize()
 
     if (debug_)
     {
-        for (unsigned int i = 0; i < n_frames_; ++i)
+        for (int i = 0; i < n_frames_; ++i)
         {
             HIGHLIGHT_NAMED("EffAxisAlignment",
                             "Frame " << frames_[i].frame_A_link_name << ":"
@@ -105,8 +100,8 @@ void EffAxisAlignment::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi,
         tf::vectorKDLToEigen(kinematics[0].Phi(i).p, link_position_in_base_);
         tf::vectorKDLToEigen(kinematics[0].Phi(i + n_frames_).p, link_axis_position_in_base_);
 
-        Eigen::Vector3d axisInBase = link_axis_position_in_base_ - link_position_in_base_;
-        Eigen::MatrixXd axisInBaseJacobian = kinematics[0].jacobian[i + n_frames_].data.block(0, 0, 3, N) - kinematics[0].jacobian[i].data.block(0, 0, 3, N);
+        const Eigen::Vector3d axisInBase = link_axis_position_in_base_ - link_position_in_base_;
+        const Eigen::MatrixXd axisInBaseJacobian = kinematics[0].jacobian[i + n_frames_].data.block(0, 0, 3, N) - kinematics[0].jacobian[i].data.block(0, 0, 3, N);
 
         phi(i) = axisInBase.dot(dir_.col(i)) - 1.0;
         jacobian.row(i) = dir_.col(i).transpose() * axisInBaseJacobian;
@@ -120,7 +115,7 @@ int EffAxisAlignment::TaskSpaceDim()
 
 Eigen::Vector3d EffAxisAlignment::GetDirection(const std::string& frame_name)
 {
-    for (unsigned int i = 0; i < n_frames_; ++i)
+    for (int i = 0; i < n_frames_; ++i)
     {
         if (frames_[i].frame_A_link_name == frame_name)
         {
@@ -132,7 +127,7 @@ Eigen::Vector3d EffAxisAlignment::GetDirection(const std::string& frame_name)
 
 void EffAxisAlignment::SetDirection(const std::string& frame_name, const Eigen::Vector3d& dir_in)
 {
-    for (unsigned int i = 0; i < n_frames_; ++i)
+    for (int i = 0; i < n_frames_; ++i)
     {
         if (frames_[i].frame_A_link_name == frame_name)
         {
@@ -145,7 +140,7 @@ void EffAxisAlignment::SetDirection(const std::string& frame_name, const Eigen::
 
 Eigen::Vector3d EffAxisAlignment::GetAxis(const std::string& frame_name)
 {
-    for (unsigned int i = 0; i < n_frames_; ++i)
+    for (int i = 0; i < n_frames_; ++i)
     {
         if (frames_[i].frame_A_link_name == frame_name)
         {
@@ -157,7 +152,7 @@ Eigen::Vector3d EffAxisAlignment::GetAxis(const std::string& frame_name)
 
 void EffAxisAlignment::SetAxis(const std::string& frame_name, const Eigen::Vector3d& axis_in)
 {
-    for (unsigned int i = 0; i < n_frames_; ++i)
+    for (int i = 0; i < n_frames_; ++i)
     {
         if (frames_[i].frame_A_link_name == frame_name)
         {
