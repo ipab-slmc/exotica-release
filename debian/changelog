@@ -1,0 +1,8 @@
+ros-melodic-exotica-ompl-control-solver (5.1.0-1stretch) stretch; urgency=high
+
+  * Added exotica_ompl_control_solver
+  * Contributors: Traiko Dinev, Wolfgang Merkt
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Fri, 31 Jan 2020 00:00:00 -0000
+
+
