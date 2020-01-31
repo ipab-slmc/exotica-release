@@ -1,0 +1,8 @@
+ros-melodic-exotica-core-task-maps (5.1.0-1bionic) bionic; urgency=high
+
+  * Added various new taskmaps
+  * Contributors: Chris Mower, Christian Rauch, Vladimir Ivan, Wolfgang Merkt
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Fri, 31 Jan 2020 00:00:00 -0000
+
+
