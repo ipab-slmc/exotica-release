@@ -33,9 +33,6 @@ REGISTER_TASKMAP_TYPE("JointVelocityBackwardDifference", exotica::JointVelocityB
 
 namespace exotica
 {
-JointVelocityBackwardDifference::JointVelocityBackwardDifference() = default;
-JointVelocityBackwardDifference::~JointVelocityBackwardDifference() = default;
-
 void JointVelocityBackwardDifference::AssignScene(ScenePtr scene)
 {
     scene_ = scene;
@@ -46,16 +43,12 @@ void JointVelocityBackwardDifference::AssignScene(ScenePtr scene)
     // Set binomial coefficient parameters
     backward_difference_params_ = -1.0;
 
-    // Frequency
-    if (init_.dt <= 0) ThrowPretty("dt cannot be smaller than or equal to 0.");
-    dt_inv_ = 1 / init_.dt;
-
     // Init each col of q_ with start state
     q_.resize(N_, 1);
-    if (init_.StartState.rows() == 0)
+    if (parameters_.StartState.rows() == 0)
         q_.setZero(N_);
-    else if (init_.StartState.rows() == N_)
-        q_ = init_.StartState;
+    else if (parameters_.StartState.rows() == N_)
+        q_ = parameters_.StartState;
     else
         ThrowPretty("Wrong size for StartState!");
 
@@ -64,11 +57,6 @@ void JointVelocityBackwardDifference::AssignScene(ScenePtr scene)
 
     // Init identity matrix
     I_ = Eigen::MatrixXd::Identity(N_, N_);
-}
-
-void JointVelocityBackwardDifference::Instantiate(JointVelocityBackwardDifferenceInitializer& init)
-{
-    init_ = init;
 }
 
 void JointVelocityBackwardDifference::SetPreviousJointState(Eigen::VectorXdRefConst joint_state)
@@ -89,18 +77,17 @@ void JointVelocityBackwardDifference::Update(Eigen::VectorXdRefConst x, Eigen::V
     if (phi.rows() != N_) ThrowNamed("Wrong size of phi!");
 
     // Estimate third time derivative
-    phi = dt_inv_ * (x + qbd_);
+    phi = x + qbd_;
 }
 
 void JointVelocityBackwardDifference::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, Eigen::MatrixXdRef jacobian)
 {
     // Input check
-    if (phi.rows() != N_) ThrowNamed("Wrong size of phi!");
     if (jacobian.rows() != N_ || jacobian.cols() != N_) ThrowNamed("Wrong size of jacobian! " << N_);
 
     // Estimate third time derivative and set Jacobian to identity matrix
-    phi = dt_inv_ * (x + qbd_);
-    jacobian = dt_inv_ * I_;
+    Update(x, phi);
+    jacobian = I_;
 }
 
 int JointVelocityBackwardDifference::TaskSpaceDim()

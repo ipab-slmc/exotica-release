@@ -42,7 +42,7 @@ REGISTER_MOTIONSOLVER_TYPE("AICOSolver", exotica::AICOSolver)
 
 namespace exotica
 {
-void AICOSolver::Instantiate(AICOSolverInitializer& init)
+void AICOSolver::Instantiate(const AICOSolverInitializer& init)
 {
     std::string mode = init.SweepMode;
     if (mode == "Forwardly")
@@ -63,53 +63,10 @@ void AICOSolver::Instantiate(AICOSolverInitializer& init)
     function_tolerance_ = init.FunctionTolerance;
     damping_init_ = init.Damping;
     use_bwd_msg_ = init.UseBackwardMessage;
+    verbose_ = init.Verbose;
 }
 
-AICOSolver::AICOSolver()
-    : damping(0.01),
-      minimum_step_tolerance_(1e-5),
-      step_tolerance_(1e-5),
-      function_tolerance_(1e-5),
-      max_backtrack_iterations_(10),
-      use_bwd_msg_(false),
-      bwd_msg_v_(),
-      bwd_msg_Vinv_(),
-      s(),
-      Sinv(),
-      v(),
-      Vinv(),
-      r(),
-      R(),
-      rhat(),
-      b(),
-      Binv(),
-      q(),
-      qhat(),
-      s_old(),
-      Sinv_old(),
-      v_old(),
-      Vinv_old(),
-      r_old(),
-      R_old(),
-      rhat_old(),
-      b_old(),
-      Binv_old(),
-      q_old(),
-      qhat_old(),
-      damping_reference_(),
-      cost_(0.0),
-      cost_old_(0.0),
-      cost_prev_(std::numeric_limits<double>::max()),
-      b_step_(0.0),
-      Winv(),
-      sweep_(0),
-      sweep_mode_(0),
-      W(),
-      update_count_(0),
-      damping_init_(0.0),
-      q_stat_()
-{
-}
+AICOSolver::AICOSolver() = default;
 
 AICOSolver::~AICOSolver() = default;
 
@@ -140,12 +97,12 @@ void AICOSolver::Solve(Eigen::MatrixXd& solution)
     // with the start state
     if (!q0.isApprox(q_init[0]))
     {
-        if (debug_) HIGHLIGHT("AICO::Solve cold-started");
+        if (verbose_) HIGHLIGHT("AICO::Solve cold-started");
         q_init.assign(prob_->GetT(), q0);
     }
     else
     {
-        if (debug_) HIGHLIGHT("AICO::Solve called with initial trajectory guess");
+        if (verbose_) HIGHLIGHT("AICO::Solve called with initial trajectory guess");
     }
 
     prob_->SetStartState(q_init[0]);
@@ -155,7 +112,7 @@ void AICOSolver::Solve(Eigen::MatrixXd& solution)
     if (prob_->GetT() != last_T_) InitMessages();
 
     Timer timer;
-    if (debug_) ROS_WARN_STREAM("AICO: Setting up the solver");
+    if (verbose_) ROS_WARN_STREAM("AICO: Setting up the solver");
     update_count_ = 0;
     damping = damping_init_;
     double d;
@@ -165,7 +122,7 @@ void AICOSolver::Solve(Eigen::MatrixXd& solution)
     }
     iteration_count_ = -1;
     InitTrajectory(q_init);
-    if (debug_) ROS_WARN_STREAM("AICO: Solving");
+    if (verbose_) ROS_WARN_STREAM("AICO: Solving");
 
     // Reset sweep and iteration count
     sweep_ = 0;
@@ -200,7 +157,7 @@ void AICOSolver::Solve(Eigen::MatrixXd& solution)
             // Check convergence if
             //    a) damping is on and the iteration has concluded (the sweep improved the cost)
             //    b) damping is off [each sweep equals one iteration]
-            if (damping && sweep_improved_cost_ || !damping)
+            if ((damping && sweep_improved_cost_) || !damping)
             {
                 // 1. Check step tolerance
                 // || x_t-x_t-1 || <= stepTolerance * max(1, || x_t ||)
@@ -283,18 +240,7 @@ void AICOSolver::InitMessages()
     R.assign(prob_->GetT(), Eigen::MatrixXd::Zero(prob_->N, prob_->N));
     rhat = Eigen::VectorXd::Zero(prob_->GetT());
     qhat.assign(prob_->GetT(), Eigen::VectorXd::Zero(prob_->N));
-    {
-        q = b;
-        if (prob_->W.rows() != prob_->N)
-        {
-            ThrowNamed(prob_->W.rows() << "!=" << prob_->N);
-        }
-    }
-    {
-        // Set constant W,Win,H,Hinv
-        W = prob_->W;
-        Winv = W.inverse();
-    }
+    q = b;
 
     cost_control_.resize(prob_->GetT());
     cost_control_.setZero();
@@ -313,7 +259,7 @@ void AICOSolver::InitMessages()
 
 void AICOSolver::InitTrajectory(const std::vector<Eigen::VectorXd>& q_init)
 {
-    if (q_init.size() != prob_->GetT())
+    if (q_init.size() != static_cast<std::size_t>(prob_->GetT()))
     {
         ThrowNamed("Incorrect number of timesteps provided!");
     }
@@ -338,6 +284,16 @@ void AICOSolver::InitTrajectory(const std::vector<Eigen::VectorXd>& q_init)
         // Compute task message reference
         UpdateTaskMessage(t, b[t], 0.0);
     }
+
+    // W is still writable, check dimension
+    if (prob_->W.rows() != prob_->N)
+    {
+        ThrowNamed(prob_->W.rows() << "!=" << prob_->N);
+    }
+
+    // Set constant W,Win,H,Hinv
+    W = prob_->W;
+    Winv = W.inverse();
 
     cost_ = EvaluateTrajectory(b, true);  // The problem will be updated via UpdateTaskMessage, i.e. do not update on this roll-out
     cost_prev_ = cost_;
@@ -425,7 +381,7 @@ double AICOSolver::GetTaskCosts(int t)
             rhat[t] += prec * (-prob_->cost.ydiff[t].segment(start, len) + prob_->cost.jacobian[t].middleRows(start, len) * qhat[t]).squaredNorm();
         }
     }
-    return prob_->ct * C;
+    return prob_->get_ct() * C;
 }
 
 void AICOSolver::UpdateTimestep(int t, bool update_fwd, bool update_bwd,
@@ -480,7 +436,7 @@ void AICOSolver::UpdateTimestepGaussNewton(int t, bool update_fwd,
 double AICOSolver::EvaluateTrajectory(const std::vector<Eigen::VectorXd>& x,
                                       bool skip_update)
 {
-    if (debug_) ROS_WARN_STREAM("Evaluating, iteration " << iteration_count_ << ", sweep_ " << sweep_);
+    if (verbose_) ROS_WARN_STREAM("Evaluating, iteration " << iteration_count_ << ", sweep " << sweep_);
     Timer timer;
 
     q = x;
@@ -491,10 +447,14 @@ double AICOSolver::EvaluateTrajectory(const std::vector<Eigen::VectorXd>& x,
         for (int t = 0; t < prob_->GetT(); ++t)
         {
             ++update_count_;
+            if (!q[t].allFinite())
+            {
+                ThrowNamed("q[" << t << "] is not finite: " << q[t].transpose());
+            }
             prob_->Update(q[t], t);
         }
     }
-    if (debug_ && !skip_update) HIGHLIGHT("Roll-out took: " << timer.GetDuration());
+    if (verbose_ && !skip_update) HIGHLIGHT("Roll-out took: " << timer.GetDuration());
 
     for (int t = 1; t < prob_->GetT(); ++t)
     {
@@ -565,14 +525,21 @@ double AICOSolver::Step()
             ThrowNamed("non-existing Sweep mode");
     }
     b_step_ = 0.0;
-    for (t = 0; t < b.size(); ++t)
+    for (t = 0; t < static_cast<int>(b.size()); ++t)
     {
         b_step_ = std::max((b_old[t] - b[t]).array().abs().maxCoeff(), b_step_);
     }
     damping_reference_ = b;
     // q is set inside of EvaluateTrajectory() function
     cost_ = EvaluateTrajectory(b);
-    if (debug_) HIGHLIGHT("Iteration: " << iteration_count_ << ", Sweep: " << sweep_ << ", updates: " << update_count_ << ", cost(ctrl/task/total): " << cost_control_.sum() << "/" << cost_task_.sum() << "/" << cost_ << " (dq=" << b_step_ << ", damping=" << damping << ")");
+    if (verbose_)
+    {
+        HIGHLIGHT("Iteration: " << iteration_count_ << ", Sweep: " << sweep_ << ", updates: " << update_count_ << ", cost(ctrl/task/total): " << cost_control_.sum() << "/" << cost_task_.sum() << "/" << cost_ << " (dq=" << b_step_ << ", damping=" << damping << ")");
+    }
+    else if (debug_ && sweep_ == 0)
+    {
+        HIGHLIGHT("Iteration: " << iteration_count_ << ", updates: " << update_count_ << ", cost(ctrl/task/total): " << cost_control_.sum() << "/" << cost_task_.sum() << "/" << cost_ << " (dq=" << b_step_ << ", damping=" << damping << ")");
+    }
     if (cost_ < 0) return -1.0;
     best_sweep_ = sweep_;
 
@@ -636,7 +603,7 @@ void AICOSolver::PerhapsUndoStep()
         cost_task_ = cost_task_old_;
         best_sweep_ = best_sweep_old_;
         b_step_ = b_step_old_;
-        if (debug_) HIGHLIGHT("Reverting to previous line-search step (" << best_sweep_ << ")");
+        if (verbose_) HIGHLIGHT("Reverting to previous line-search step (" << best_sweep_ << ")");
     }
     else
     {
