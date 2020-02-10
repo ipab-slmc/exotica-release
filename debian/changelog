@@ -1,7 +1,0 @@
-ros-melodic-exotica-pendulum-dynamics-solver (5.1.0-1stretch) stretch; urgency=high
-
-  * Added exotica_pendulum_dynamics_solver
-
- -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Fri, 31 Jan 2020 00:00:00 -0000
-
-
