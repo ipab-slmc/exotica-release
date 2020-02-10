@@ -1,11 +1,12 @@
-# Changelog
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Changelog for package exotica_collision_scene_fcl
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-## [Unreleased]
-### Changed
-- renamed KinematicTree::GetJointNames -> KinematicTree::GetControlledJointNames
-- renamed Scene::GetJointNames -> Scene::GetControlledJointNames
-- pyexotica: get_joint_names -> get_controlled_joint_names
+5.1.1 (2020-02-10)
+------------------
 
-### Added
-- pyexotica: get_model_link_names, get_controlled_link_names
-- pyexotica: get_model_joint_names, get_controlled_joint_names
+5.1.0 (2020-01-31)
+------------------
+* Address -Wall warnings (`#679 <https://github.com/ipab-slmc/exotica/issues/679>`_)
+* Address catkin_lint (`#549 <https://github.com/ipab-slmc/exotica/issues/549>`_)
+* Contributors: Christian Rauch, Wolfgang Merkt
