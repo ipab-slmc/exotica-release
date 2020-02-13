@@ -1,21 +1,11 @@
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Changelog for package exotica_python
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Changelog
 
-5.1.3 (2020-02-13)
-------------------
-* Refactor CollisionScene, add faster distance checks, speedup SmoothCollisionDistance (`#688 <https://github.com/ipab-slmc/exotica/issues/688>`_)
-* Expose full KinematicTree to Python; expose mesh collision shape information (`#686 <https://github.com/ipab-slmc/exotica/issues/686>`_) 
-* Allow labels/legend in plot()
-* Contributors: Wolfgang Merkt
+## [Unreleased]
+### Changed
+- renamed KinematicTree::GetJointNames -> KinematicTree::GetControlledJointNames
+- renamed Scene::GetJointNames -> Scene::GetControlledJointNames
+- pyexotica: get_joint_names -> get_controlled_joint_names
 
-5.1.2 (2020-02-10)
-------------------
-
-5.1.1 (2020-02-10)
-------------------
-
-5.1.0 (2020-01-31)
-------------------
-* Updates to match code developments and expose more functions
-* Contributors: Adabotics, Chris Mower, Christian Rauch, Matt Timmons-Brown, Traiko Dinev, Vladimir Ivan, Wolfgang Merkt
+### Added
+- pyexotica: get_model_link_names, get_controlled_link_names
+- pyexotica: get_model_joint_names, get_controlled_joint_names
