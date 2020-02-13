@@ -1,16 +1,11 @@
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Changelog for package exotica_cartpole_dynamics_solver
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Changelog
 
-5.1.3 (2020-02-13)
-------------------
+## [Unreleased]
+### Changed
+- renamed KinematicTree::GetJointNames -> KinematicTree::GetControlledJointNames
+- renamed Scene::GetJointNames -> Scene::GetControlledJointNames
+- pyexotica: get_joint_names -> get_controlled_joint_names
 
-5.1.2 (2020-02-10)
-------------------
-
-5.1.1 (2020-02-10)
-------------------
-
-5.1.0 (2020-01-31)
-------------------
-* Add `exotica_cartpole_dynamics_solver`
+### Added
+- pyexotica: get_model_link_names, get_controlled_link_names
+- pyexotica: get_model_joint_names, get_controlled_joint_names
