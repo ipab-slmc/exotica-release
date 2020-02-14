@@ -41,10 +41,6 @@ namespace exotica
 class CenterOfMass : public TaskMap, public Instantiable<CenterOfMassInitializer>
 {
 public:
-    CenterOfMass();
-    virtual ~CenterOfMass();
-
-    void Instantiate(CenterOfMassInitializer& init) override;
     void AssignScene(ScenePtr scene) override;
 
     void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi) override;
@@ -64,9 +60,7 @@ private:
     visualization_msgs::Marker goal_marker_;
     bool enable_z_;
     int dim_;
-
-    CenterOfMassInitializer init_;
 };
-}
+}  // namespace exotica
 
 #endif  // EXOTICA_CORE_TASK_MAPS_COM_H_
