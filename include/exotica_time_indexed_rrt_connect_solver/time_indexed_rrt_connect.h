@@ -106,11 +106,7 @@ typedef boost::function<ompl::base::PlannerPtr(const ompl::base::SpaceInformatio
 class TimeIndexedRRTConnectSolver : public MotionSolver, Instantiable<TimeIndexedRRTConnectSolverInitializer>
 {
 public:
-    TimeIndexedRRTConnectSolver();
-
-    virtual ~TimeIndexedRRTConnectSolver();
-
-    void Instantiate(TimeIndexedRRTConnectSolverInitializer &init) override;
+    void Instantiate(const TimeIndexedRRTConnectSolverInitializer &init) override;
     void Solve(Eigen::MatrixXd &solution) override;
     void SpecifyProblem(PlanningProblemPtr pointer) override;
     void SetPlannerTerminationCondition(const std::shared_ptr<ompl::base::PlannerTerminationCondition> &ptc);
@@ -129,7 +125,6 @@ protected:
     void PostSolve();
     void GetPath(Eigen::MatrixXd &traj, ompl::base::PlannerTerminationCondition &ptc);
 
-    TimeIndexedRRTConnectSolverInitializer init_;
     TimeIndexedSamplingProblemPtr prob_;
     ompl::geometric::SimpleSetupPtr ompl_simple_setup_;
     ompl::base::StateSpacePtr state_space_;
@@ -231,9 +226,6 @@ protected:
     {
         static const Eigen::VectorXd max_vel = si_->getStateSpace()->as<OMPLTimeIndexedRNStateSpace>()->prob_->vel_limits;
 
-        const OMPLTimeIndexedRNStateSpace::StateType *sa = static_cast<const OMPLTimeIndexedRNStateSpace::StateType *>(a->state);
-        const OMPLTimeIndexedRNStateSpace::StateType *sb = static_cast<const OMPLTimeIndexedRNStateSpace::StateType *>(b->state);
-
         double ta, tb;
         Eigen::VectorXd qa, qb;
         si_->getStateSpace()->as<OMPLTimeIndexedRNStateSpace>()->OMPLToExoticaState(a->state, qa, ta);
@@ -249,9 +241,6 @@ protected:
     double reverseTimeDistance(const Motion *a, const Motion *b) const
     {
         static const Eigen::VectorXd max_vel = si_->getStateSpace()->as<OMPLTimeIndexedRNStateSpace>()->prob_->vel_limits;
-
-        const OMPLTimeIndexedRNStateSpace::StateType *sa = static_cast<const OMPLTimeIndexedRNStateSpace::StateType *>(a->state);
-        const OMPLTimeIndexedRNStateSpace::StateType *sb = static_cast<const OMPLTimeIndexedRNStateSpace::StateType *>(b->state);
 
         double ta, tb;
         Eigen::VectorXd qa, qb;
