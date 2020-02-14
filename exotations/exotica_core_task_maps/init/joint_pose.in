@@ -1,0 +1,6 @@
+class JointPose
+
+extend <exotica_core/task_map>
+
+Optional Eigen::VectorXd JointRef;
+Optional Eigen::VectorXd JointMap;
