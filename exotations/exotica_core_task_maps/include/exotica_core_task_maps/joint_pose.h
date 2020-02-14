@@ -39,10 +39,6 @@ namespace exotica
 class JointPose : public TaskMap, public Instantiable<JointPoseInitializer>
 {
 public:
-    JointPose();
-    virtual ~JointPose();
-
-    void Instantiate(JointPoseInitializer& init) override;
     void AssignScene(ScenePtr scene) override;
 
     void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi) override;
@@ -52,12 +48,10 @@ public:
 
     std::vector<int> joint_map_;  // TODO: Make private with getter
     Eigen::VectorXd joint_ref_;   // TODO: Make private with getter
-    int N_;                       // TODO: Make private with getter
 
 private:
+    int num_controlled_joints_;  ///! Number of controlled joints
     void Initialize();
-
-    JointPoseInitializer init_;
 };
 }
 

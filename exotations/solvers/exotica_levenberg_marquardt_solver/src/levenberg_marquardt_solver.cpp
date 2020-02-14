@@ -26,7 +26,6 @@ REGISTER_MOTIONSOLVER_TYPE("LevenbergMarquardtSolverSolver", exotica::LevenbergM
 
 namespace exotica
 {
-void LevenbergMarquardtSolver::Instantiate(LevenbergMarquardtSolverInitializer& init) { parameters_ = init; }
 void LevenbergMarquardtSolver::SpecifyProblem(PlanningProblemPtr pointer)
 {
     if (pointer->type() != "exotica::UnconstrainedEndPoseProblem")
@@ -41,6 +40,12 @@ void LevenbergMarquardtSolver::SpecifyProblem(PlanningProblemPtr pointer)
 
     // specific problem
     prob_ = std::static_pointer_cast<UnconstrainedEndPoseProblem>(pointer);
+
+    // check dimension of alpha
+    if (parameters_.Alpha.size() > 1 && parameters_.Alpha.size() != this->problem_->N)
+    {
+        ThrowNamed("Wrong alpha dimension: alpha(" << parameters_.Alpha.size() << ") != states(" << this->problem_->N << ")")
+    }
 }
 
 void LevenbergMarquardtSolver::Solve(Eigen::MatrixXd& solution)
@@ -67,7 +72,7 @@ void LevenbergMarquardtSolver::Solve(Eigen::MatrixXd& solution)
     double error_prev = std::numeric_limits<double>::infinity();
     Eigen::VectorXd yd;
     Eigen::VectorXd qd;
-    for (size_t i = 0; i < GetNumberOfMaxIterations(); ++i)
+    for (int i = 0; i < GetNumberOfMaxIterations(); ++i)
     {
         prob_->Update(q);
 

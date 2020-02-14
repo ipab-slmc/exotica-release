@@ -44,9 +44,6 @@ fcl::Transform3f KDL2fcl(const KDL::Frame& frame)
 
 namespace exotica
 {
-CollisionSceneFCL::CollisionSceneFCL() = default;
-CollisionSceneFCL::~CollisionSceneFCL() = default;
-
 void CollisionSceneFCL::Setup()
 {
     if (debug_) HIGHLIGHT_NAMED("CollisionSceneFCL", "FCL version: " << FCL_VERSION);
@@ -54,7 +51,7 @@ void CollisionSceneFCL::Setup()
 
 void CollisionSceneFCL::UpdateCollisionObjects(const std::map<std::string, std::weak_ptr<KinematicElement>>& objects)
 {
-    kinematic_elements_ = MapToVec(objects);
+    kinematic_elements_ = GetValuesFromMap(objects);
     fcl_cache_.clear();
     fcl_objects_.resize(objects.size());
     long i = 0;
@@ -173,12 +170,12 @@ std::shared_ptr<fcl::CollisionObject> CollisionSceneFCL::ConstructFclCollisionOb
             if (mesh->vertex_count > 0 && mesh->triangle_count > 0)
             {
                 std::vector<fcl::Triangle> tri_indices(mesh->triangle_count);
-                for (int i = 0; i < mesh->triangle_count; ++i)
+                for (unsigned int i = 0; i < mesh->triangle_count; ++i)
                     tri_indices[i] =
                         fcl::Triangle(mesh->triangles[3 * i], mesh->triangles[3 * i + 1], mesh->triangles[3 * i + 2]);
 
                 std::vector<fcl::Vec3f> points(mesh->vertex_count);
-                for (int i = 0; i < mesh->vertex_count; ++i)
+                for (unsigned int i = 0; i < mesh->vertex_count; ++i)
                     points[i] = fcl::Vec3f(mesh->vertices[3 * i], mesh->vertices[3 * i + 1], mesh->vertices[3 * i + 2]);
 
                 g->beginModel();
@@ -318,20 +315,6 @@ std::vector<std::string> CollisionSceneFCL::GetCollisionWorldLinks()
         if (!element->closest_robot_link.lock())
         {
             tmp.push_back(element->segment.getName());
-        }
-    }
-    return tmp;
-}
-
-std::vector<std::shared_ptr<KinematicElement>> CollisionSceneFCL::GetCollisionWorldLinkElements()
-{
-    std::vector<std::shared_ptr<KinematicElement>> tmp;
-    for (fcl::CollisionObject* object : fcl_objects_)
-    {
-        std::shared_ptr<KinematicElement> element = kinematic_elements_[reinterpret_cast<long>(object->getUserData())].lock();
-        if (!element->closest_robot_link.lock())
-        {
-            tmp.push_back(element);
         }
     }
     return tmp;
