@@ -39,8 +39,9 @@ REGISTER_MOTIONSOLVER_TYPE("BayesianIKSolver", exotica::BayesianIKSolver)
 
 namespace exotica
 {
-void BayesianIKSolver::Instantiate(BayesianIKSolverInitializer& init)
+void BayesianIKSolver::Instantiate(const BayesianIKSolverInitializer& init)
 {
+    parameters_ = init;
     std::string mode = init.SweepMode;
     if (mode == "Forwardly")
         sweep_mode_ = FORWARD;
@@ -60,54 +61,9 @@ void BayesianIKSolver::Instantiate(BayesianIKSolverInitializer& init)
     function_tolerance_ = init.FunctionTolerance;
     damping_init_ = init.Damping;
     use_bwd_msg_ = init.UseBackwardMessage;
+    verbose_ = init.Verbose;
 }
 
-BayesianIKSolver::BayesianIKSolver()
-    : damping(0.01),
-      minimum_step_tolerance_(1e-5),
-      step_tolerance_(1e-5),
-      function_tolerance_(1e-5),
-      max_backtrack_iterations_(10),
-      use_bwd_msg_(false),
-      bwd_msg_v_(),
-      bwd_msg_Vinv_(),
-      s(),
-      Sinv(),
-      v(),
-      Vinv(),
-      r(),
-      R(),
-      rhat(),
-      b(),
-      Binv(),
-      q(),
-      qhat(),
-      s_old(),
-      Sinv_old(),
-      v_old(),
-      Vinv_old(),
-      r_old(),
-      R_old(),
-      rhat_old(),
-      b_old(),
-      Binv_old(),
-      q_old(),
-      qhat_old(),
-      damping_reference_(),
-      cost_(0.0),
-      cost_old_(std::numeric_limits<double>::max()),
-      cost_prev_(std::numeric_limits<double>::max()),
-      b_step_(0.0),
-      Winv(),
-      sweep_(0),
-      sweep_mode_(0),
-      W(),
-      update_count_(0),
-      damping_init_(100.0)
-{
-}
-
-BayesianIKSolver::~BayesianIKSolver() {}
 void BayesianIKSolver::SpecifyProblem(PlanningProblemPtr problem)
 {
     if (problem->type() != "exotica::UnconstrainedEndPoseProblem")
@@ -129,13 +85,13 @@ void BayesianIKSolver::Solve(Eigen::MatrixXd& solution)
     Eigen::VectorXd q0 = prob_->ApplyStartState();
 
     Timer timer;
-    if (debug_) ROS_WARN_STREAM("BayesianIKSolver: Setting up the solver");
+    if (verbose_) ROS_WARN_STREAM("BayesianIKSolver: Setting up the solver");
     update_count_ = 0;
     damping = damping_init_;
     double d;
     iteration_count_ = -1;
     InitTrajectory(q0);
-    if (debug_) ROS_WARN_STREAM("BayesianIKSolver: Solving");
+    if (verbose_) ROS_WARN_STREAM("BayesianIKSolver: Solving");
 
     // Reset sweep and iteration count
     sweep_ = 0;
@@ -170,7 +126,7 @@ void BayesianIKSolver::Solve(Eigen::MatrixXd& solution)
             // Check convergence if
             //    a) damping is on and the iteration has concluded (the sweep improved the cost)
             //    b) damping is off [each sweep equals one iteration]
-            if (damping && sweep_improved_cost_ || !damping)
+            if ((damping && sweep_improved_cost_) || !damping)
             {
                 // 1. Check step tolerance
                 // || x_t-x_t-1 || <= stepTolerance * max(1, || x_t ||)
@@ -211,13 +167,6 @@ void BayesianIKSolver::Solve(Eigen::MatrixXd& solution)
 
 void BayesianIKSolver::InitMessages()
 {
-    if (prob_ == nullptr) ThrowNamed("Problem definition is a NULL pointer!");
-
-    if (prob_->N < 1)
-    {
-        ThrowNamed("State dimension is too small: n=" << prob_->N);
-    }
-
     s = Eigen::VectorXd::Zero(prob_->N);
     Sinv = Eigen::MatrixXd::Zero(prob_->N, prob_->N);
     v = Eigen::VectorXd::Zero(prob_->N);
@@ -238,24 +187,11 @@ void BayesianIKSolver::InitMessages()
     b = Eigen::VectorXd::Zero(prob_->N);
     damping_reference_ = Eigen::VectorXd::Zero(prob_->N);
     Binv = Eigen::MatrixXd::Zero(prob_->N, prob_->N);
-    // Binv[0].setIdentity();
-    // Binv[0] = Binv[0] * 1e10;
     r = Eigen::VectorXd::Zero(prob_->N);
     R = Eigen::MatrixXd::Zero(prob_->N, prob_->N);
     rhat = 0;
     qhat = Eigen::VectorXd::Zero(prob_->N);
-    {
-        q = b;
-        if (prob_->W.rows() != prob_->N)
-        {
-            ThrowNamed(prob_->W.rows() << "!=" << prob_->N);
-        }
-    }
-    {
-        // Set constant W,Win,H,Hinv
-        W = prob_->W;
-        Winv = W.inverse();
-    }
+    q = b;
 }
 
 void BayesianIKSolver::InitTrajectory(const Eigen::VectorXd& q_init)
@@ -271,6 +207,16 @@ void BayesianIKSolver::InitTrajectory(const Eigen::VectorXd& q_init)
     Vinv.setZero();
     Vinv.diagonal().setConstant(damping);
 
+    // W is still writable, check dimension
+    if (prob_->W.rows() != prob_->N)
+    {
+        ThrowNamed(prob_->W.rows() << "!=" << prob_->N);
+    }
+
+    // Set constant W,Win,H,Hinv
+    W = prob_->W;
+    Winv = W.inverse();
+
     // Compute task message reference
     UpdateTaskMessage(b, 0.0);
 
@@ -278,7 +224,7 @@ void BayesianIKSolver::InitTrajectory(const Eigen::VectorXd& q_init)
     cost_prev_ = cost_;
     prob_->SetCostEvolution(0, cost_);
     if (cost_ < 0) ThrowNamed("Invalid cost! " << cost_);
-    if (debug_) HIGHLIGHT("Initial cost, updates: " << update_count_ << ", cost: " << cost_);
+    if (verbose_) HIGHLIGHT("Initial cost, updates: " << update_count_ << ", cost: " << cost_);
     RememberOldState();
 }
 
@@ -324,13 +270,12 @@ void BayesianIKSolver::UpdateTaskMessage(const Eigen::Ref<const Eigen::VectorXd>
 
     prob_->Update(qhat);
     ++update_count_;
-    double c = GetTaskCosts();
+    GetTaskCosts();
     // q_stat_.addw(c > 0 ? 1.0 / (1.0 + c) : 1.0, qhat_t);
 }
 
-double BayesianIKSolver::GetTaskCosts()
+void BayesianIKSolver::GetTaskCosts()
 {
-    double C = 0;
     Eigen::MatrixXd Jt;
     double prec;
     rhat = 0;
@@ -344,13 +289,11 @@ double BayesianIKSolver::GetTaskCosts()
             const int& start = prob_->cost.indexing[i].start_jacobian;
             const int& len = prob_->cost.indexing[i].length_jacobian;
             Jt = prob_->cost.jacobian.middleRows(start, len).transpose();
-            C += prec * (prob_->cost.ydiff.segment(start, len)).squaredNorm();
             R += prec * Jt * prob_->cost.jacobian.middleRows(start, len);
             r += prec * Jt * (-prob_->cost.ydiff.segment(start, len) + prob_->cost.jacobian.middleRows(start, len) * qhat);
             rhat += prec * (-prob_->cost.ydiff.segment(start, len) + prob_->cost.jacobian.middleRows(start, len) * qhat).squaredNorm();
         }
     }
-    return C;
 }
 
 void BayesianIKSolver::UpdateTimestep(bool update_fwd, bool update_bwd,
@@ -404,7 +347,7 @@ void BayesianIKSolver::UpdateTimestepGaussNewton(bool update_fwd,
 
 double BayesianIKSolver::EvaluateTrajectory(const Eigen::VectorXd& x, bool skip_update)
 {
-    if (debug_) ROS_WARN_STREAM("Evaluating, iteration " << iteration_count_ << ", sweep_ " << sweep_);
+    if (verbose_) ROS_WARN_STREAM("Evaluating, iteration " << iteration_count_ << ", sweep_ " << sweep_);
     q = x;
 
     // Perform update / roll-out
@@ -509,7 +452,7 @@ void BayesianIKSolver::PerhapsUndoStep()
         damping_reference_ = b_old;
         best_sweep_ = best_sweep_old_;
         b_step_ = b_step_old_;
-        if (debug_) HIGHLIGHT("Reverting to previous line-search step (" << best_sweep_ << ")");
+        if (verbose_) HIGHLIGHT("Reverting to previous line-search step (" << best_sweep_ << ")");
     }
     else
     {
