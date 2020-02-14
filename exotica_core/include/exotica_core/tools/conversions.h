@@ -30,14 +30,21 @@
 #ifndef EXOTICA_CORE_CONVERSIONS_H_
 #define EXOTICA_CORE_CONVERSIONS_H_
 
-#include <Eigen/Dense>
-#include <kdl/frames.hpp>
-#include <kdl/jacobian.hpp>
 #include <map>
 #include <memory>
 #include <vector>
 
+#include <kdl/frames.hpp>
+#include <kdl/jacobian.hpp>
+
+#include <Eigen/Dense>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-conversion"
+#include <unsupported/Eigen/CXX11/Tensor>
+#pragma GCC diagnostic pop
+
 #include <exotica_core/tools/exception.h>
+#include <exotica_core/tools/printable.h>
 
 namespace Eigen
 {
@@ -49,6 +56,21 @@ typedef const Ref<const MatrixXd>& MatrixXdRefConst;
 
 Eigen::VectorXd VectorTransform(double px = 0.0, double py = 0.0, double pz = 0.0, double qx = 0.0, double qy = 0.0, double qz = 0.0, double qw = 1.0);
 Eigen::VectorXd IdentityTransform();
+
+template <typename T>
+using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+template <typename Scalar, int rank, typename sizeType>
+inline MatrixType<Scalar> TensorToMatrix(const Eigen::Tensor<Scalar, rank>& tensor, const sizeType rows, const sizeType cols)
+{
+    return Eigen::Map<const MatrixType<Scalar>>(tensor.data(), rows, cols);
+}
+
+template <typename Scalar, typename... Dims>
+inline Eigen::Tensor<Scalar, sizeof...(Dims)> MatrixToTensor(const MatrixType<Scalar>& matrix, Dims... dims)
+{
+    constexpr int rank = sizeof...(Dims);
+    return Eigen::TensorMap<Eigen::Tensor<const Scalar, rank>>(matrix.data(), {dims...});
+}
 }
 
 namespace exotica
@@ -67,9 +89,9 @@ KDL::Rotation GetRotation(Eigen::VectorXdRefConst data, RotationType type);
 
 Eigen::VectorXd SetRotation(const KDL::Rotation& data, RotationType type);
 
-inline int GetRotationTypeLength(RotationType type)
+inline int GetRotationTypeLength(const RotationType& type)
 {
-    static int types[] = {4, 3, 3, 3, 3, 9};
+    static constexpr int types[] = {4, 3, 3, 3, 3, 9};
     return types[static_cast<int>(type)];
 }
 
@@ -115,12 +137,34 @@ inline bool IsVectorContainerType(std::string type)
 }
 
 template <class Key, class Val>
-std::vector<Val> MapToVec(const std::map<Key, Val>& map)
+[[deprecated("Replaced by GetKeysFromMap and GetValuesFromMap")]] std::vector<Val> MapToVec(const std::map<Key, Val>& map)
 {
     std::vector<Val> ret;
-    for (auto& val : map)
+    for (auto& it : map)
     {
-        ret.push_back(val.second);
+        ret.push_back(it.second);
+    }
+    return ret;
+}
+
+template <class Key, class Val>
+std::vector<Key> GetKeysFromMap(const std::map<Key, Val>& map)
+{
+    std::vector<Key> ret;
+    for (auto& it : map)
+    {
+        ret.push_back(it.first);
+    }
+    return ret;
+}
+
+template <class Key, class Val>
+std::vector<Val> GetValuesFromMap(const std::map<Key, Val>& map)
+{
+    std::vector<Val> ret;
+    for (auto& it : map)
+    {
+        ret.push_back(it.second);
     }
     return ret;
 }
@@ -161,6 +205,12 @@ inline double ToNumber<double>(const std::string& val)
     return std::stod(val);
 }
 
+template <>
+inline int ToNumber<int>(const std::string& val)
+{
+    return std::stoi(val);
+}
+
 template <typename T, const int S>  // Eigen::Vector<S><T>
 inline Eigen::Matrix<T, S, 1> ParseVector(const std::string value)
 {
@@ -182,7 +232,7 @@ inline Eigen::Matrix<T, S, 1> ParseVector(const std::string value)
             ret[i - 1] = std::numeric_limits<T>::quiet_NaN();
         }
     }
-    if (i == 0) ThrowPretty("Empty vector!");
+    if (i == 0) WARNING_NAMED("Parser", "Empty vector!")
     if (S != Eigen::Dynamic && S != i)
     {
         ThrowPretty("Wrong vector size! Requested: " + std::to_string(S) + ", Provided: " + std::to_string(i));
@@ -233,7 +283,7 @@ inline std::vector<std::string> ParseList(const std::string& value, char token =
     {
         ret.push_back(Trim(item));
     }
-    if (ret.size() == 0) ThrowPretty("Empty vector!");
+    if (ret.size() == 0) WARNING_NAMED("Parser", "Empty vector!")
     return ret;
 }
 
@@ -253,7 +303,7 @@ inline std::vector<int> ParseIntList(const std::string value)
         }
         ret.push_back(tmp);
     }
-    if (ret.size() == 0) ThrowPretty("Empty vector!");
+    if (ret.size() == 0) WARNING_NAMED("Parser", "Empty vector!")
     return ret;
 }
 
@@ -273,7 +323,7 @@ inline std::vector<bool> ParseBoolList(const std::string value)
         }
         ret.push_back(tmp);
     }
-    if (ret.empty()) ThrowPretty("Empty vector!");
+    if (ret.empty()) WARNING_NAMED("Parser", "Empty vector!")
     return ret;
 }
 }

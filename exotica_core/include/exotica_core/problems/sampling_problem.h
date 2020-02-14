@@ -43,10 +43,11 @@ public:
     SamplingProblem();
     virtual ~SamplingProblem();
 
-    virtual void Instantiate(SamplingProblemInitializer& init);
+    virtual void Instantiate(const SamplingProblemInitializer& init);
 
     void Update(Eigen::VectorXdRefConst x);
-    bool IsValid(Eigen::VectorXdRefConst x);  // Not overriding on purpose
+    bool IsValid(Eigen::VectorXdRefConst x);  // Not overriding on purpose - this updates and calls IsValid
+    bool IsValid() override;
     void PreUpdate() override;
 
     int GetSpaceDim();
@@ -73,8 +74,6 @@ public:
     int length_Phi;
     int length_jacobian;
     int num_tasks;
-
-    SamplingProblemInitializer parameters;
 
 private:
     Eigen::VectorXd goal_;
