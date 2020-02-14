@@ -58,20 +58,20 @@ std_msgs::ColorRGBA RandomColor();
 inline std_msgs::ColorRGBA GetColor(double r, double g, double b, double a = 1.0)
 {
     std_msgs::ColorRGBA ret;
-    ret.r = r;
-    ret.g = g;
-    ret.b = b;
-    ret.a = a;
+    ret.r = static_cast<float>(r);
+    ret.g = static_cast<float>(g);
+    ret.b = static_cast<float>(b);
+    ret.a = static_cast<float>(a);
     return ret;
 }
 
-inline std_msgs::ColorRGBA GetColor(Eigen::Vector4d rgba)
+inline std_msgs::ColorRGBA GetColor(const Eigen::Vector4d& rgba)
 {
     std_msgs::ColorRGBA ret;
-    ret.r = rgba(0);
-    ret.g = rgba(1);
-    ret.b = rgba(2);
-    ret.a = rgba(3);
+    ret.r = static_cast<float>(rgba(0));
+    ret.g = static_cast<float>(rgba(1));
+    ret.b = static_cast<float>(rgba(2));
+    ret.a = static_cast<float>(rgba(3));
     return ret;
 }
 
@@ -86,8 +86,6 @@ void LoadOBJ(const std::string& data, Eigen::VectorXi& tri,
 
 void SaveMatrix(std::string file_name,
                 const Eigen::Ref<const Eigen::MatrixXd> mat);
-
-void GetText(std::string& txt, KDL::Frame& ret);
 
 template <typename T>
 std::vector<std::string> getKeys(std::map<std::string, T> map)
