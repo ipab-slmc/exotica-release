@@ -27,15 +27,16 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include <exotica_core/exotica_core.h>
 #undef NDEBUG
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
 #include <exotica_core_task_maps/center_of_mass.h>
+#include <exotica_core_task_maps/collision_distance.h>
 #include <exotica_core_task_maps/distance.h>
 #include <exotica_core_task_maps/eff_axis_alignment.h>
+#include <exotica_core_task_maps/eff_box.h>
 #include <exotica_core_task_maps/eff_frame.h>
 #include <exotica_core_task_maps/eff_orientation.h>
 #include <exotica_core_task_maps/eff_position.h>
@@ -44,8 +45,9 @@
 #include <exotica_core_task_maps/joint_jerk_backward_difference.h>
 #include <exotica_core_task_maps/joint_limit.h>
 #include <exotica_core_task_maps/joint_pose.h>
+#include <exotica_core_task_maps/joint_torque_minimization_proxy.h>
 #include <exotica_core_task_maps/joint_velocity_backward_difference.h>
-#include <exotica_core_task_maps/look_at.h>
+#include <exotica_core_task_maps/joint_velocity_limit_constraint.h>
 #include <exotica_core_task_maps/point_to_line.h>
 #include <exotica_core_task_maps/sphere_collision.h>
 
@@ -72,11 +74,15 @@ PYBIND11_MODULE(exotica_core_task_maps_py, module)
         .def("get_direction", &EffAxisAlignment::GetDirection)
         .def("set_direction", &EffAxisAlignment::SetDirection);
 
-    py::class_<LookAt, std::shared_ptr<LookAt>, TaskMap>(module, "LookAt")
-        .def("get_look_at_target_in_world", &LookAt::get_look_at_target_in_world);
+    py::class_<EffBox, std::shared_ptr<EffBox>, TaskMap>(module, "EffBox")
+        .def("get_lower_limit", &EffBox::GetLowerLimit)
+        .def("get_upper_limit", &EffBox::GetUpperLimit);
 
     py::class_<PointToLine, std::shared_ptr<PointToLine>, TaskMap>(module, "PointToLine")
         .def_property("end_point", &PointToLine::GetEndPoint, &PointToLine::SetEndPoint);
+
+    py::class_<JointVelocityLimitConstraint, std::shared_ptr<JointVelocityLimitConstraint>, TaskMap>(module, "JointVelocityLimitConstraint")
+        .def("set_previous_joint_state", &JointVelocityLimitConstraint::SetPreviousJointState);
 
     py::class_<JointVelocityBackwardDifference, std::shared_ptr<JointVelocityBackwardDifference>, TaskMap>(module, "JointVelocityBackwardDifference")
         .def("set_previous_joint_state", &JointVelocityBackwardDifference::SetPreviousJointState);
@@ -92,9 +98,11 @@ PYBIND11_MODULE(exotica_core_task_maps_py, module)
     py::class_<Distance, std::shared_ptr<Distance>, TaskMap>(module, "Distance");
 
     py::class_<JointPose, std::shared_ptr<JointPose>, TaskMap>(module, "JointPose")
-        .def_readonly("N", &JointPose::N_)
         .def_readonly("joint_map", &JointPose::joint_map_)
         .def_readwrite("joint_ref", &JointPose::joint_ref_);
+
+    py::class_<JointTorqueMinimizationProxy, std::shared_ptr<JointTorqueMinimizationProxy>, TaskMap>(module, "JointTorqueMinimizationProxy")
+        .def_property("h", &JointTorqueMinimizationProxy::get_h, &JointTorqueMinimizationProxy::set_h);
 
     py::class_<InteractionMesh, std::shared_ptr<InteractionMesh>, TaskMap>(module, "InteractionMesh")
         .def_property("W", &InteractionMesh::GetWeights, &InteractionMesh::SetWeights)
@@ -111,4 +119,7 @@ PYBIND11_MODULE(exotica_core_task_maps_py, module)
     py::class_<JointLimit, std::shared_ptr<JointLimit>, TaskMap>(module, "JointLimit");
 
     py::class_<SphereCollision, std::shared_ptr<SphereCollision>, TaskMap>(module, "SphereCollision");
+
+    py::class_<CollisionDistance, std::shared_ptr<CollisionDistance>, TaskMap>(module, "CollisionDistance")
+        .def("get_collision_proxies", &CollisionDistance::get_collision_proxies);
 }

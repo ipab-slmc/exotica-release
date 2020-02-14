@@ -34,23 +34,14 @@
 
 namespace exotica
 {
-TaskMap::TaskMap() = default;
-TaskMap::~TaskMap() = default;
-
 void TaskMap::AssignScene(ScenePtr scene)
 {
     scene_ = scene;
 }
 
-std::string TaskMap::Print(std::string prepend)
-{
-    std::string ret = Object::Print(prepend);
-    return ret;
-}
-
 void TaskMap::InstantiateBase(const Initializer& init)
 {
-    Object::InstatiateObject(init);
+    Object::InstantiateObject(init);
     TaskMapInitializer MapInitializer(init);
     is_used = true;
 
@@ -63,7 +54,7 @@ void TaskMap::InstantiateBase(const Initializer& init)
     }
 }
 
-std::vector<KinematicFrameRequest> TaskMap::GetFrames()
+std::vector<KinematicFrameRequest> TaskMap::GetFrames() const
 {
     return frames_;
 }
@@ -73,24 +64,38 @@ void TaskMap::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef Phi, Eigen::M
     if (jacobian.rows() != TaskSpaceDim() && jacobian.cols() != x.rows())
         ThrowNamed("Jacobian dimension mismatch!");
 
-    // Store original x (needs to be reset later).
-    Eigen::VectorXd x_original(x);
-    Update(x_original, Phi);
-
-    // Backward finite differencing.
-    constexpr double h = 1e-6;
-    Eigen::VectorXd x_tmp;
-    Eigen::VectorXd phi_original(Phi);
-    for (int i = 0; i < TaskSpaceDim(); ++i)
+    if (scene_ == nullptr)
     {
-        x_tmp = x;
-        x_tmp(i) -= h;
-        Update(x_tmp, Phi);
-        jacobian.row(i) = (1 / h) * (phi_original - Phi);
+        ThrowNamed("Scene is not initialised!");
     }
 
-    // Finally, reset with original value again.
-    Update(x_original, Phi);
+    // Set constants
+    constexpr double h = 1e-6;
+    constexpr double h_inverse = 1.0 / h;
+
+    // Compute x/Phi using forward mapping (no jacobian)
+    Update(x, Phi);
+
+    // Setup for gradient estimate
+    Eigen::VectorXd x_backward(x.size()), Phi_backward(TaskSpaceDim());
+
+    // Backward finite differencing
+    for (int i = 0; i < jacobian.cols(); ++i)
+    {
+        // Compute and set x_backward as model state
+        x_backward = x;
+        x_backward(i) -= h;
+        scene_->GetKinematicTree().Update(x_backward);
+
+        // Compute phi_backward using forward mapping (no jacobian)
+        Update(x_backward, Phi_backward);
+
+        // Compute gradient estimate
+        jacobian.col(i) = h_inverse * (Phi - Phi_backward);
+    }
+
+    // Reset model state
+    scene_->GetKinematicTree().Update(x);
 }
 
 void TaskMap::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef Phi, Eigen::MatrixXdRef jacobian, HessianRef hessian)
@@ -102,4 +107,4 @@ void TaskMap::Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef Phi, Eigen::M
         hessian(i) = jacobian.row(i).transpose() * jacobian.row(i);
     }
 }
-}
+}  // namespace
