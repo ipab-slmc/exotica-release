@@ -36,11 +36,15 @@ namespace exotica
 EffOrientation::EffOrientation() = default;
 EffOrientation::~EffOrientation() = default;
 
-void EffOrientation::Instantiate(EffOrientationInitializer& init)
+void EffOrientation::Instantiate(const EffOrientationInitializer &init)
 {
     if (init.Type == "Quaternion")
     {
         rotation_type_ = RotationType::QUATERNION;
+    }
+    else if (init.Type == "RPY")
+    {
+        rotation_type_ = RotationType::RPY;
     }
     else if (init.Type == "ZYX")
     {
@@ -58,15 +62,20 @@ void EffOrientation::Instantiate(EffOrientationInitializer& init)
     {
         rotation_type_ = RotationType::MATRIX;
     }
+    else
+    {
+        ThrowNamed("Unsupported rotation type '" << init.Type << "'");
+    }
     stride_ = GetRotationTypeLength(rotation_type_);
 }
 
 std::vector<TaskVectorEntry> EffOrientation::GetLieGroupIndices()
 {
     std::vector<TaskVectorEntry> ret;
+    ret.reserve(kinematics[0].Phi.rows());
     for (int i = 0; i < kinematics[0].Phi.rows(); ++i)
     {
-        ret.push_back(TaskVectorEntry(start + i * stride_, rotation_type_));
+        ret.emplace_back(TaskVectorEntry(start + i * stride_, rotation_type_));
     }
     return ret;
 }
@@ -100,4 +109,4 @@ int EffOrientation::TaskSpaceJacobianDim()
 {
     return kinematics[0].Phi.rows() * 3;
 }
-}
+}  // namespace exotica
