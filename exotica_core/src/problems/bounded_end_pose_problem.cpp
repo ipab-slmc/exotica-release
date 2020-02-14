@@ -48,7 +48,7 @@ Eigen::MatrixXd BoundedEndPoseProblem::GetBounds() const
     return scene_->GetKinematicTree().GetJointLimits();
 }
 
-void BoundedEndPoseProblem::Instantiate(BoundedEndPoseProblemInitializer& init)
+void BoundedEndPoseProblem::Instantiate(const BoundedEndPoseProblemInitializer& init)
 {
     num_tasks = tasks_.size();
     length_Phi = 0;
@@ -105,17 +105,17 @@ void BoundedEndPoseProblem::PreUpdate()
     cost.UpdateS();
 }
 
-double BoundedEndPoseProblem::GetScalarCost()
+double BoundedEndPoseProblem::GetScalarCost() const
 {
     return cost.ydiff.transpose() * cost.S * cost.ydiff;
 }
 
-Eigen::VectorXd BoundedEndPoseProblem::GetScalarJacobian()
+Eigen::RowVectorXd BoundedEndPoseProblem::GetScalarJacobian() const
 {
     return cost.jacobian.transpose() * cost.S * cost.ydiff * 2.0;
 }
 
-double BoundedEndPoseProblem::GetScalarTaskCost(const std::string& task_name)
+double BoundedEndPoseProblem::GetScalarTaskCost(const std::string& task_name) const
 {
     for (int i = 0; i < cost.indexing.size(); ++i)
     {
@@ -223,10 +223,19 @@ bool BoundedEndPoseProblem::IsValid()
 {
     Eigen::VectorXd x = scene_->GetKinematicTree().GetControlledState();
     Eigen::MatrixXd bounds = scene_->GetKinematicTree().GetJointLimits();
+
+    std::cout.precision(4);
+    constexpr double tolerance = 1.e-3;
+
+    bool succeeded = true;
     for (unsigned int i = 0; i < N; ++i)
     {
-        if (x(i) < bounds(i, 0) || x(i) > bounds(i, 1)) return false;
+        if (x(i) < bounds(i, 0) - tolerance || x(i) > bounds(i, 1) + tolerance)
+        {
+            if (debug_) HIGHLIGHT_NAMED("BoundedEndPoseProblem::IsValid", "Out of bounds (joint #" << i << "): " << bounds(i, 0) << " < " << x(i) << " < " << bounds(i, 1));
+            succeeded = false;
+        }
     }
-    return true;
+    return succeeded;
 }
-}
+}  // namespace exotica

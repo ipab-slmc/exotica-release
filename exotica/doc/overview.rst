@@ -18,12 +18,12 @@ Consider a robot arm mounted to a workbench (see picture). The arm consists of s
 
 .. code-block:: cpp
 
-    #include <exotica/Exotica.h>
+    #include <exotica_core/exotica_core.h>
     using namespace exotica;
 
     int main(int argc, char **argv)
     {
-        MotionSolver_ptr solver = XMLLoader::loadSolver("{exotica_examples}/resources/configs/example_ik.xml");
+        MotionSolverPtr solver = XMLLoader::LoadSolver("{exotica_examples}/resources/configs/example_ik.xml");
         Eigen::MatrixXd solution;
         solver->Solve(solution);
     }
@@ -51,6 +51,7 @@ System model
 ============
 To synthesize motion, we describe the system consisting of the robot and its environment using a mathematical model. This system model may be kinematic or it may include dynamic properties and constraints. EXOTica uses the system model to evaluate the state using tools implemented inside the ``planning scene``. The system diagram shows the ``planning scene`` as a part of the planning problem where it performs several computations required for evaluating the problem.
 
+.._overview-planning-scene:
 Planning scene
 --------------
 The ``planning scene`` implements the tools for updating and managing the robot model and the environment. The robot model is represented by a kinematic tree which stores both the kinematic and dynamic properties of the robot, e.g., link masses and shapes, joint definitions, etc. The environment is a collection of additional models that are not part of the robot tree but that may interact with the robot. The environment may contain reference frames, other simplified models (geometric shapes), and real sensor data based representations such as pointclouds and `OctoMaps <http://octomap.github.com>`_. The planning scene implements algorithms for managing the objects in the environment (e.g. adding/removing obstacles) as well as computing forward kinematics and forward dynamics.
@@ -76,7 +77,7 @@ The system model provides an interface to answer kinematic queries. A query can 
  - Name of the tip frame (Frame A)
  - Offset of the tip frame
  - Name of the base frame (Frame B)
- - Offset the of base frame
+ - Offset of the base frame
 
 The diagram above illustrates an example scene. Any existing frame can be used to define a base or a tip frame of a relative transformation.
 The response to the query will then contain a transformation of the tip frame with respect to the base frame. If an offset is specified, each respective frame will be redefined to include the offset. If a base frame is not specified, the world frame will be used by default. Since all transformations of the tree nodes w.r.t. the world frame have been computed during the update, the query computation only adds the tip frame to the inverted base frame :math:`$M_A^B={M_B^{world}}^{-1}M_A^{world}`. 
@@ -111,6 +112,7 @@ Problem definition
 ==================
 EXOTica was designed for prototyping and benchmarking motion synthesis algorithms. The main objective of our framework is to provide tools for constructing problems and prototyping solvers with ease. To do so, we first separate the definition of the problem from the implementation of the solver. Each problem consists of several standardized components which we refer to as ``task maps``.
 
+.._overview-task-maps:
 Task maps
 ---------
 The core element of every problem defined within EXOTica is the function mapping from the configuration space (i.e. the problem state which captures the model state, a set of controlled and uncontrolled variables, and the state of the environment) to a task space. We call this function a ``task map``. For example, a task map computes the center-of-mass of the robot in the world frame. A task map is a mapping from the configuration space to an arbitrary task space. The task space is, in fact, defined by the output of this function.
@@ -178,7 +180,7 @@ In our example, we use the ``end-effector position`` task map. The task space is
     <Maps>
         <EffPosition Name="Position">
             <EndEffector>
-            <Frame Link="lwr_arm_7_link" BaseOffset="0.5 0 0.5 0 0 0 1"/>
+                <Frame Link="lwr_arm_7_link" BaseOffset="0.5 0 0.5 0 0 0 1"/>
             </EndEffector>
         </EffPosition>
     </Maps>
