@@ -58,7 +58,7 @@ public:
 
     /// \brief Type Information wrapper: must be virtual so that it is polymorphic...
     /// @return String containing the type of the object
-    inline virtual std::string type()
+    inline virtual std::string type() const
     {
         return GetTypeName(typeid(*this));
     }
@@ -68,14 +68,14 @@ public:
         return object_name_;
     }
 
-    void InstatiateObject(const Initializer& init)
+    void InstantiateObject(const Initializer& init)
     {
         ObjectInitializer oinit(init);
         object_name_ = oinit.Name;
         debug_ = oinit.Debug;
     }
 
-    virtual std::string Print(std::string prepend)
+    virtual std::string Print(const std::string& prepend) const
     {
         return prepend + "  " + object_name_ + " (" + type() + ")";
     }
