@@ -30,6 +30,7 @@
 #ifndef EXOTICA_CORE_MOTION_SOLVER_H_
 #define EXOTICA_CORE_MOTION_SOLVER_H_
 
+#include <exotica_core/factory.h>
 #include <exotica_core/object.h>
 #include <exotica_core/planning_problem.h>
 #include <exotica_core/property.h>
@@ -46,8 +47,8 @@ public:
     virtual void InstantiateBase(const Initializer& init);
     virtual void SpecifyProblem(PlanningProblemPtr pointer);
     virtual void Solve(Eigen::MatrixXd& solution) = 0;
-    PlanningProblemPtr GetProblem() { return problem_; }
-    virtual std::string Print(std::string prepend);
+    PlanningProblemPtr GetProblem() const { return problem_; }
+    std::string Print(const std::string& prepend) const override;
     void SetNumberOfMaxIterations(int max_iter)
     {
         if (max_iter < 1) ThrowPretty("Number of maximum iterations needs to be greater than 0.");
