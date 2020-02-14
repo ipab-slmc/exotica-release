@@ -40,22 +40,36 @@
 
 namespace exotica
 {
-PlanningProblem::PlanningProblem() : flags_(KIN_FK), N(0)
-{
-}
+PlanningProblem::PlanningProblem() = default;
+PlanningProblem::~PlanningProblem() = default;
 
-std::string PlanningProblem::Print(std::string prepend)
+std::string PlanningProblem::Print(const std::string& prepend) const
 {
     std::string ret = Object::Print(prepend);
     ret += "\n" + prepend + "  Task definitions:";
-    for (auto& it : task_maps_)
+    for (const auto& it : task_maps_)
         ret += "\n" + it.second->Print(prepend + "    ");
     return ret;
 }
 
+int PlanningProblem::get_num_positions() const
+{
+    return num_positions_;
+}
+
+int PlanningProblem::get_num_velocities() const
+{
+    return num_velocities_;
+}
+
+int PlanningProblem::get_num_controls() const
+{
+    return num_controls_;
+}
+
 Eigen::VectorXd PlanningProblem::ApplyStartState(bool update_traj)
 {
-    scene_->SetModelState(start_state_, t_start, update_traj);
+    scene_->SetModelState(start_state_.head(num_positions_), t_start, update_traj);
     return scene_->GetControlledState();
 }
 
@@ -66,13 +80,14 @@ void PlanningProblem::PreUpdate()
 
 void PlanningProblem::SetStartState(Eigen::VectorXdRefConst x)
 {
-    if (x.rows() == scene_->GetKinematicTree().GetNumModelJoints())
+    const auto num_states = num_positions_ + num_velocities_;
+    if (x.rows() == num_states)
     {
         start_state_ = x;
     }
     else if (x.rows() == scene_->GetKinematicTree().GetNumControlledJoints())
     {
-        std::vector<std::string> jointNames = scene_->GetJointNames();
+        std::vector<std::string> jointNames = scene_->GetControlledJointNames();
         std::vector<std::string> modelNames = scene_->GetModelJointNames();
         for (int i = 0; i < jointNames.size(); ++i)
         {
@@ -82,13 +97,18 @@ void PlanningProblem::SetStartState(Eigen::VectorXdRefConst x)
             }
         }
     }
+    else if (x.rows() == num_positions_)
+    {
+        start_state_.head(num_positions_) = x;
+    }
+    // TODO: Add support for num_controlled + tangent vector size initialisation
     else
     {
-        ThrowNamed("Wrong start state vector size, expected " << scene_->GetKinematicTree().GetNumModelJoints() << ", got " << x.rows());
+        ThrowNamed("Wrong start state vector size, expected " << num_states << ", got " << x.rows());
     }
 }
 
-Eigen::VectorXd PlanningProblem::GetStartState()
+Eigen::VectorXd PlanningProblem::GetStartState() const
 {
     return start_state_;
 }
@@ -98,15 +118,15 @@ void PlanningProblem::SetStartTime(double t)
     t_start = t;
 }
 
-double PlanningProblem::GetStartTime()
+double PlanningProblem::GetStartTime() const
 {
     return t_start;
 }
 
-void PlanningProblem::InstantiateBase(const Initializer& init_)
+void PlanningProblem::InstantiateBase(const Initializer& init_in)
 {
-    Object::InstatiateObject(init_);
-    PlanningProblemInitializer init(init_);
+    Object::InstantiateObject(init_in);
+    PlanningProblemInitializer init(init_in);
 
     task_maps_.clear();
     tasks_.clear();
@@ -114,16 +134,62 @@ void PlanningProblem::InstantiateBase(const Initializer& init_)
     // Create the scene
     scene_.reset(new Scene());
     scene_->InstantiateInternal(SceneInitializer(init.PlanningScene));
-    start_state_ = Eigen::VectorXd::Zero(scene_->GetModelJointNames().size());
+
+    // Set size of positions. This is valid for kinematic problems and will be
+    // overridden in dynamic problems to set num_velocities_ and num_controls_.
+    num_positions_ = scene_->GetKinematicTree().GetNumModelJoints();
     N = scene_->GetKinematicTree().GetNumControlledJoints();
 
-    if (init.StartState.rows() > 0)
+    // Check if dynamics solver has been initialised, and if so update problem
+    // properties.
+    if (scene_->GetDynamicsSolver() != nullptr)
     {
-        SetStartState(init.StartState);
-    }
-    if (init.StartTime < 0)
-        ThrowNamed("Invalid start time " << init.StartTime) else t_start = init.StartTime;
+        // TODO: Strictly speaking N here should correspond to the number of controls, which comes from the dynamic solver - to be fixed!
+        num_controls_ = scene_->GetDynamicsSolver()->get_num_controls();
 
+        // TODO: As a current workaround, we assume num_velocities_ = num_positions_
+        // This holds true if there are no special joints (including floating base
+        // or spherical joints). For sanity, we check that the dynamics solver
+        // dimensions match - otherwise throw.
+        num_velocities_ = num_positions_;
+
+        if ((scene_->GetDynamicsSolver()->get_num_positions() != scene_->GetDynamicsSolver()->get_num_velocities()) ||
+            (scene_->GetDynamicsSolver()->get_num_positions() != num_positions_))
+        {
+            // The quadrotor and other floating-base robots are currently broken (cf. #571)
+            if (scene_->GetDynamicsSolver()->get_num_positions() > num_positions_)
+            {
+                ThrowPretty("Proper floating-base joints in dynamic problems not yet supported. Cf. #571.");
+                // num_positions_ = scene_->GetDynamicsSolver()->get_num_positions();
+                // num_velocities_ = scene_->GetDynamicsSolver()->get_num_velocities();
+            }
+            // If the difference is exactly 1, just add it:
+            else if ((scene_->GetDynamicsSolver()->get_num_positions() - scene_->GetDynamicsSolver()->get_num_velocities()) == 1)
+            {
+                num_velocities_ -= 1;
+            }
+            // Else, throw for now:
+            else
+            {
+                WARNING_NAMED("PlanningProblem::InstantiateBase",
+                              "Size of tangent vector in DynamicsSolver does not satisfy workaround-assumption (cf. #570):\n"
+                                  << "num_positions_=" << num_positions_ << " vs (num_positions_=" << scene_->GetDynamicsSolver()->get_num_positions() << ", num_velocities_=" << scene_->GetDynamicsSolver()->get_num_velocities() << ").");
+                ThrowPretty("SAD.");
+            }
+        }
+    }
+
+    // Set the start state
+    start_state_ = Eigen::VectorXd::Zero(num_positions_ + num_velocities_);
+    if (init.StartState.rows() > 0)
+        SetStartState(init.StartState);
+
+    // Set the start time
+    if (init.StartTime < 0)
+        ThrowNamed("Invalid start time " << init.StartTime);
+    t_start = init.StartTime;
+
+    // Set the derivative order for Kinematics
     switch (init.DerivativeOrder)
     {
         case 0:
@@ -188,7 +254,7 @@ void PlanningProblem::UpdateTaskKinematics(std::shared_ptr<KinematicResponse> re
         task->kinematics[0].Create(response);
 }
 
-void PlanningProblem::updateMultipleTaskKinematics(std::vector<std::shared_ptr<KinematicResponse>> responses)
+void PlanningProblem::UpdateMultipleTaskKinematics(std::vector<std::shared_ptr<KinematicResponse>> responses)
 {
     for (auto task : tasks_)
     {
@@ -203,6 +269,7 @@ void PlanningProblem::updateMultipleTaskKinematics(std::vector<std::shared_ptr<K
         }
     }
 }
+
 TaskMapMap& PlanningProblem::GetTaskMaps()
 {
     return task_maps_;
@@ -213,12 +280,12 @@ TaskMapVec& PlanningProblem::GetTasks()
     return tasks_;
 }
 
-ScenePtr PlanningProblem::GetScene()
+ScenePtr PlanningProblem::GetScene() const
 {
     return scene_;
 }
 
-std::pair<std::vector<double>, std::vector<double>> PlanningProblem::GetCostEvolution()
+std::pair<std::vector<double>, std::vector<double>> PlanningProblem::GetCostEvolution() const
 {
     std::pair<std::vector<double>, std::vector<double>> ret;
     for (size_t position = 0; position < cost_evolution_.size(); ++position)
@@ -231,7 +298,12 @@ std::pair<std::vector<double>, std::vector<double>> PlanningProblem::GetCostEvol
     return ret;
 }
 
-double PlanningProblem::GetCostEvolution(int index)
+int PlanningProblem::GetNumberOfIterations() const
+{
+    return static_cast<int>(std::get<0>(GetCostEvolution()).size());
+}
+
+double PlanningProblem::GetCostEvolution(int index) const
 {
     if (index > -1 && index < cost_evolution_.size())
     {
@@ -247,7 +319,7 @@ double PlanningProblem::GetCostEvolution(int index)
     }
 }
 
-void PlanningProblem::ResetCostEvolution(unsigned int size)
+void PlanningProblem::ResetCostEvolution(size_t size)
 {
     cost_evolution_.resize(size);
     cost_evolution_.assign(size, std::make_pair<std::chrono::high_resolution_clock::time_point, double>(std::chrono::high_resolution_clock::now(), std::numeric_limits<double>::quiet_NaN()));
@@ -270,4 +342,4 @@ void PlanningProblem::SetCostEvolution(int index, double value)
         ThrowPretty("Out of range: " << index << " where length=" << cost_evolution_.size());
     }
 }
-}
+}  // namespace exotica

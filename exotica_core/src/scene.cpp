@@ -32,6 +32,7 @@
 #include <geometric_shapes/shape_operations.h>
 #include <kdl_conversions/kdl_msg.h>
 
+#include <exotica_core/dynamics_solver.h>
 #include <exotica_core/scene.h>
 #include <exotica_core/server.h>
 #include <exotica_core/setup.h>
@@ -44,24 +45,25 @@ namespace exotica
 {
 Scene::Scene() = default;
 
-Scene::Scene(const std::string& name) : name_(name), request_needs_updating_(false)
+Scene::Scene(const std::string& name) : request_needs_updating_(false)
 {
-    object_name_ = name_;
+    object_name_ = name;
 }
 
 Scene::~Scene() = default;
 
-std::string Scene::GetName()
+const std::string& Scene::GetName() const
 {
-    return name_;
+    return object_name_;
 }
 
-void Scene::Instantiate(SceneInitializer& init)
+void Scene::Instantiate(const SceneInitializer& init)
 {
-    Object::InstatiateObject(init);
-    name_ = object_name_;
+    Object::InstantiateObject(SceneInitializer(init));
+    this->parameters_ = init;
     kinematica_.debug = debug_;
-    force_collision_ = init.AlwaysUpdateCollisionScene;
+
+    // Load robot model and set up kinematics (KinematicTree)
     robot_model::RobotModelPtr model;
     if (init.URDF == "" || init.SRDF == "")
     {
@@ -71,31 +73,29 @@ void Scene::Instantiate(SceneInitializer& init)
     {
         Server::Instance()->GetModel(init.URDF, model, init.URDF, init.SRDF);
     }
-    kinematica_.Instantiate(init.JointGroup, model, name_);
-    group = model->getJointModelGroup(init.JointGroup);
+    kinematica_.Instantiate(init.JointGroup, model, object_name_);
     ps_.reset(new planning_scene::PlanningScene(model));
 
     // Write URDF/SRDF to ROS param server
     if (Server::IsRos() && init.SetRobotDescriptionRosParams && init.URDF != "" && init.SRDF != "")
     {
-        if (debug_) HIGHLIGHT_NAMED(name_, "Setting robot_description and robot_description_semantic from URDF and SRDF initializers");
-        std::string urdf_string = PathExists(init.URDF) ? LoadFile(init.URDF) : init.URDF;
-        std::string srdf_string = PathExists(init.SRDF) ? LoadFile(init.SRDF) : init.SRDF;
+        if (debug_) HIGHLIGHT_NAMED(object_name_, "Setting robot_description and robot_description_semantic from URDF and SRDF initializers");
+        const std::string urdf_string = PathExists(init.URDF) ? LoadFile(init.URDF) : init.URDF;
+        const std::string srdf_string = PathExists(init.SRDF) ? LoadFile(init.SRDF) : init.SRDF;
         Server::SetParam("/robot_description", urdf_string);
         Server::SetParam("/robot_description_semantic", srdf_string);
     }
 
-    base_type_ = kinematica_.GetControlledBaseType();
-
+    // Set up debug topics if running in ROS mode
     if (Server::IsRos())
     {
-        ps_pub_ = Server::Advertise<moveit_msgs::PlanningScene>(name_ + (name_ == "" ? "" : "/") + "PlanningScene", 100, true);
-        proxy_pub_ = Server::Advertise<visualization_msgs::Marker>(name_ + (name_ == "" ? "" : "/") + "CollisionProxies", 100, true);
+        ps_pub_ = Server::Advertise<moveit_msgs::PlanningScene>(object_name_ + (object_name_ == "" ? "" : "/") + "PlanningScene", 100, true);
+        proxy_pub_ = Server::Advertise<visualization_msgs::Marker>(object_name_ + (object_name_ == "" ? "" : "/") + "CollisionProxies", 100, true);
         if (debug_)
             HIGHLIGHT_NAMED(
-                name_,
+                object_name_,
                 "Running in debug mode, planning scene will be published to '"
-                    << Server::Instance()->GetName() << "/" << name_
+                    << Server::Instance()->GetName() << "/" << object_name_
                     << "/PlanningScene'");
     }
 
@@ -106,25 +106,39 @@ void Scene::Instantiate(SceneInitializer& init)
         for (const std::string& file : files) LoadSceneFile(file, Eigen::Isometry3d::Identity(), false);
     }
 
+    // Add custom links
     for (const exotica::Initializer& linkInit : init.Links)
     {
         LinkInitializer link(linkInit);
-        AddObject(link.Name, GetFrame(link.Transform), link.Parent, nullptr, KDL::RigidBodyInertia(link.Mass, GetFrame(link.CenterOfMass).p), false);
+        AddObject(link.Name, GetFrame(link.Transform), link.Parent, nullptr, KDL::RigidBodyInertia(link.Mass, GetFrame(link.CenterOfMass).p), Eigen::Vector4d::Zero(), false);
     }
 
-    // Check list of links to exclude from CollisionScene
+    // Check list of robot links to exclude from CollisionScene
     if (init.RobotLinksToExcludeFromCollisionScene.size() > 0)
     {
         for (const auto& link : init.RobotLinksToExcludeFromCollisionScene)
         {
-            robotLinksToExcludeFromCollisionScene_.insert(link);
+            robot_links_to_exclude_from_collision_scene_.insert(link);
             if (debug_) HIGHLIGHT_NAMED("RobotLinksToExcludeFromCollisionScene", link);
         }
     }
 
+    // Check list of world links to exclude from CollisionScene
+    if (init.WorldLinksToExcludeFromCollisionScene.size() > 0)
+    {
+        for (const auto& link : init.WorldLinksToExcludeFromCollisionScene)
+        {
+            world_links_to_exclude_from_collision_scene_.insert(link);
+            if (debug_) HIGHLIGHT_NAMED("WorldLinksToExcludeFromCollisionScene", link);
+        }
+    }
+
+    // Set up CollisionScene
+    force_collision_ = init.AlwaysUpdateCollisionScene;
     collision_scene_ = Setup::CreateCollisionScene(init.CollisionScene);
     collision_scene_->debug_ = this->debug_;
     collision_scene_->Setup();
+    collision_scene_->AssignScene(shared_from_this());
     collision_scene_->SetAlwaysExternallyUpdatedCollisionScene(force_collision_);
     collision_scene_->SetReplacePrimitiveShapesWithMeshes(init.ReplacePrimitiveShapesWithMeshes);
     collision_scene_->SetWorldLinkPadding(init.WorldLinkPadding);
@@ -132,9 +146,11 @@ void Scene::Instantiate(SceneInitializer& init)
     collision_scene_->SetWorldLinkScale(init.WorldLinkScale);
     collision_scene_->SetRobotLinkScale(init.RobotLinkScale);
     collision_scene_->replace_cylinders_with_capsules = init.ReplaceCylindersWithCapsules;
+    collision_scene_->world_links_to_exclude_from_collision_scene = world_links_to_exclude_from_collision_scene_;
     UpdateSceneFrames();
     UpdateInternalFrames(false);
 
+    // Attach links
     for (const exotica::Initializer& linkInit : init.AttachLinks)
     {
         AttachLinkInitializer link(linkInit);
@@ -148,6 +164,7 @@ void Scene::Instantiate(SceneInitializer& init)
         }
     }
 
+    // Set up allowed collision matrix (i.e., collision pairs that are filtered/ignored)
     AllowedCollisionMatrix acm;
     std::vector<std::string> acm_names;
     ps_->getAllowedCollisionMatrix().getAllEntryNames(acm_names);
@@ -165,6 +182,7 @@ void Scene::Instantiate(SceneInitializer& init)
     }
     collision_scene_->SetACM(acm);
 
+    // Set up trajectory generators
     for (const exotica::Initializer& it : init.Trajectories)
     {
         TrajectoryInitializer trajInit(it);
@@ -178,7 +196,19 @@ void Scene::Instantiate(SceneInitializer& init)
         }
     }
 
-    if (debug_) INFO_NAMED(name_, "Exotica Scene initialized");
+    // Set up DynamicsSolver (requires a fully initialised scene)
+    if (init.DynamicsSolver.size() > 0)
+    {
+        // Only one dynamics solver per scene is allowed, i.e., throw if more than one provided:
+        if (init.DynamicsSolver.size() > 1) ThrowPretty("Only one DynamicsSolver per scene allowed - " << init.DynamicsSolver.size() << " provided");
+
+        // Create dynamics solver
+        dynamics_solver_ = Setup::CreateDynamicsSolver(init.DynamicsSolver.at(0));
+        dynamics_solver_->AssignScene(shared_from_this());
+        dynamics_solver_->ns_ = ns_ + "/" + dynamics_solver_->GetObjectName();
+    }
+
+    if (debug_) INFO_NAMED(object_name_, "Exotica Scene initialized");
 }
 
 void Scene::RequestKinematics(KinematicsRequest& request, std::function<void(std::shared_ptr<KinematicResponse>)> callback)
@@ -293,14 +323,14 @@ visualization_msgs::Marker Scene::ProxyToMarker(const std::vector<CollisionProxy
     return ret;
 }
 
-void Scene::SetCollisionScene(const moveit_msgs::PlanningScene& scene)
+void Scene::UpdatePlanningScene(const moveit_msgs::PlanningScene& scene)
 {
     ps_->usePlanningSceneMsg(scene);
     UpdateSceneFrames();
     UpdateInternalFrames();
 }
 
-void Scene::UpdateWorld(const moveit_msgs::PlanningSceneWorldConstPtr& world)
+void Scene::UpdatePlanningSceneWorld(const moveit_msgs::PlanningSceneWorldConstPtr& world)
 {
     ps_->processPlanningSceneWorldMsg(*world);
     UpdateSceneFrames();
@@ -312,9 +342,14 @@ void Scene::UpdateCollisionObjects()
     collision_scene_->UpdateCollisionObjects(kinematica_.GetCollisionTreeMap());
 }
 
-CollisionScenePtr& Scene::GetCollisionScene()
+const CollisionScenePtr& Scene::GetCollisionScene() const
 {
     return collision_scene_;
+}
+
+std::shared_ptr<DynamicsSolver> Scene::GetDynamicsSolver() const
+{
+    return dynamics_solver_;
 }
 
 std::string Scene::GetRootFrameName()
@@ -394,14 +429,9 @@ exotica::KinematicTree& Scene::GetKinematicTree()
     return kinematica_;
 }
 
-void Scene::GetJointNames(std::vector<std::string>& joints)
+std::vector<std::string> Scene::GetControlledJointNames()
 {
-    joints = kinematica_.GetJointNames();
-}
-
-std::vector<std::string> Scene::GetJointNames()
-{
-    return kinematica_.GetJointNames();
+    return kinematica_.GetControlledJointNames();
 }
 
 std::vector<std::string> Scene::GetControlledLinkNames()
@@ -427,6 +457,11 @@ Eigen::VectorXd Scene::GetModelState()
 std::map<std::string, double> Scene::GetModelStateMap()
 {
     return kinematica_.GetModelStateMap();
+}
+
+std::map<std::string, std::weak_ptr<KinematicElement>> Scene::GetTreeMap()
+{
+    return kinematica_.GetTreeMap();
 }
 
 void Scene::SetModelState(Eigen::VectorXdRefConst x, double t, bool update_traj)
@@ -462,11 +497,6 @@ void Scene::SetModelState(std::map<std::string, double> x, double t, bool update
 Eigen::VectorXd Scene::GetControlledState()
 {
     return kinematica_.GetControlledState();
-}
-
-std::string Scene::GetGroupName()
-{
-    return group->getName();
 }
 
 void Scene::LoadScene(const std::string& scene, const KDL::Frame& offset, bool update_collision_scene)
@@ -531,14 +561,14 @@ void Scene::UpdateInternalFrames(bool update_request)
         tf::transformKDLToEigen(it->segment.getFrameToTip(), pose);
         std::string shape_resource_path = it->shape_resource_path;
         Eigen::Vector3d scale = it->scale;
-        it = kinematica_.AddElement(it->segment.getName(), pose, it->parent_name, it->shape, it->segment.getInertia(), Eigen::Vector4d::Zero(), it->is_controlled);
+        it = kinematica_.AddElement(it->segment.getName(), pose, it->parent_name, it->shape, it->segment.getInertia(), it->color, it->visual, it->is_controlled);
         it->shape_resource_path = shape_resource_path;
         it->scale = scale;
     }
 
-    auto trajCopy = trajectory_generators_;
+    auto trajectory_generators_copy = trajectory_generators_;
     trajectory_generators_.clear();
-    for (auto& traj : trajCopy)
+    for (auto& traj : trajectory_generators_copy)
     {
         AddTrajectory(traj.first, traj.second.second);
     }
@@ -574,25 +604,31 @@ void Scene::UpdateSceneFrames()
             Eigen::Isometry3d obj_transform;
             obj_transform.translation() = object.second->shape_poses_[0].translation();
             obj_transform.linear() = object.second->shape_poses_[0].rotation();
-            kinematica_.AddEnvironmentElement(object.first, obj_transform);
-
+            std::shared_ptr<KinematicElement> element = kinematica_.AddEnvironmentElement(object.first, obj_transform);
+            std::vector<VisualElement> visuals;
             for (int i = 0; i < object.second->shape_poses_.size(); ++i)
             {
                 Eigen::Isometry3d shape_transform;
                 shape_transform.translation() = object.second->shape_poses_[i].translation();
                 shape_transform.linear() = object.second->shape_poses_[i].rotation();
                 Eigen::Isometry3d trans = obj_transform.inverse() * shape_transform;
+                VisualElement visual;
+                visual.name = object.first;
+                visual.shape = shapes::ShapePtr(object.second->shapes_[i]->clone());
+                tf::transformEigenToKDL(trans, visual.frame);
                 if (ps_->hasObjectColor(object.first))
                 {
                     auto color_msg = ps_->getObjectColor(object.first);
-                    Eigen::Vector4d color = Eigen::Vector4d(color_msg.r, color_msg.g, color_msg.b, color_msg.a);
-                    kinematica_.AddEnvironmentElement(object.first + "_collision_" + std::to_string(i), trans, object.first, object.second->shapes_[i], KDL::RigidBodyInertia::Zero(), color);
+                    visual.color = Eigen::Vector4d(color_msg.r, color_msg.g, color_msg.b, color_msg.a);
+                    kinematica_.AddEnvironmentElement(object.first + "_collision_" + std::to_string(i), trans, object.first, object.second->shapes_[i], KDL::RigidBodyInertia::Zero(), visual.color);
                 }
                 else
                 {
                     kinematica_.AddEnvironmentElement(object.first + "_collision_" + std::to_string(i), trans, object.first, object.second->shapes_[i]);
                 }
+                if (visual.shape) visuals.push_back(visual);
             }
+            element->visual = visuals;
         }
         else
         {
@@ -604,15 +640,16 @@ void Scene::UpdateSceneFrames()
     ps_->getCurrentStateNonConst().update(true);
     const std::vector<const robot_model::LinkModel*>& links =
         ps_->getCollisionRobot()->getRobotModel()->getLinkModelsWithCollisionGeometry();
-    int lastControlledJointId = -1;
-    std::string lastControlledLinkName;
-    modelLink_to_collisionLink_map_.clear();
-    modelLink_to_collisionElement_map_.clear();
-    controlledLink_to_collisionLink_map_.clear();
+
+    int last_controlled_joint_id = -1;
+    std::string last_controlled_joint_name = "";
+    model_link_to_collision_link_map_.clear();
+    model_link_to_collision_element_map_.clear();
+    controlled_joint_to_collision_link_map_.clear();
     for (int i = 0; i < links.size(); ++i)
     {
         // Check whether link is excluded from collision checking
-        if (robotLinksToExcludeFromCollisionScene_.find(links[i]->getName()) != robotLinksToExcludeFromCollisionScene_.end())
+        if (robot_links_to_exclude_from_collision_scene_.find(links[i]->getName()) != robot_links_to_exclude_from_collision_scene_.end())
         {
             continue;
         }
@@ -621,13 +658,13 @@ void Scene::UpdateSceneFrames()
         obj_transform.translation() = ps_->getCurrentState().getGlobalLinkTransform(links[i]).translation();
         obj_transform.linear() = ps_->getCurrentState().getGlobalLinkTransform(links[i]).rotation();
 
-        int jointId = GetKinematicTree().IsControlledLink(links[i]->getName());
-        if (jointId != -1)
+        int joint_id = GetKinematicTree().IsControlledLink(links[i]->getName());
+        if (joint_id != -1)
         {
-            if (lastControlledJointId != jointId)
+            if (last_controlled_joint_id != joint_id)
             {
-                lastControlledLinkName = links[i]->getName();
-                lastControlledJointId = jointId;
+                last_controlled_joint_name = GetKinematicTree().GetControlledJointNames()[joint_id];
+                last_controlled_joint_id = joint_id;
             }
         }
 
@@ -646,15 +683,16 @@ void Scene::UpdateSceneFrames()
             collisionBodyTransform.linear() = collisionBodyTransform_affine.rotation();
             Eigen::Isometry3d trans = obj_transform.inverse(Eigen::Isometry) * collisionBodyTransform;
 
-            std::shared_ptr<KinematicElement> element = kinematica_.AddElement(links[i]->getName() + "_collision_" + std::to_string(j), trans, links[i]->getName(), links[i]->getShapes()[j]);
-            modelLink_to_collisionElement_map_[links[i]->getName()].push_back(element);
+            std::string collision_element_name = links[i]->getName() + "_collision_" + std::to_string(j);
+            std::shared_ptr<KinematicElement> element = kinematica_.AddElement(collision_element_name, trans, links[i]->getName(), links[i]->getShapes()[j]);
+            model_link_to_collision_element_map_[links[i]->getName()].push_back(element);
 
             // Set up mappings
-            modelLink_to_collisionLink_map_[links[i]->getName()].push_back(links[i]->getName() + "_collision_" + std::to_string(j));
+            model_link_to_collision_link_map_[links[i]->getName()].push_back(collision_element_name);
 
-            if (lastControlledLinkName != "")
+            if (last_controlled_joint_name != "")
             {
-                controlledLink_to_collisionLink_map_[lastControlledLinkName].push_back(links[i]->getName() + "_collision_" + std::to_string(j));
+                controlled_joint_to_collision_link_map_[last_controlled_joint_name].push_back(collision_element_name);
             }
         }
     }
@@ -664,31 +702,31 @@ void Scene::UpdateSceneFrames()
     request_needs_updating_ = true;
 }
 
-void Scene::AddObject(const std::string& name, const KDL::Frame& transform, const std::string& parent, shapes::ShapeConstPtr shape, const KDL::RigidBodyInertia& inertia, bool update_collision_scene)
+void Scene::AddObject(const std::string& name, const KDL::Frame& transform, const std::string& parent, shapes::ShapeConstPtr shape, const KDL::RigidBodyInertia& inertia, const Eigen::Vector4d& color, bool update_collision_scene)
 {
     if (kinematica_.DoesLinkWithNameExist(name)) ThrowPretty("Link '" << name << "' already exists in the scene!");
     std::string parent_name = (parent == "") ? kinematica_.GetRootFrameName() : parent;
     if (!kinematica_.DoesLinkWithNameExist(parent_name)) ThrowPretty("Can't find parent '" << parent_name << "'!");
     Eigen::Isometry3d pose;
     tf::transformKDLToEigen(transform, pose);
-    custom_links_.push_back(kinematica_.AddElement(name, pose, parent_name, shape, inertia));
+    custom_links_.push_back(kinematica_.AddElement(name, pose, parent_name, shape, inertia, color));
     if (update_collision_scene) UpdateCollisionObjects();
 }
 
-void Scene::AddObject(const std::string& name, const KDL::Frame& transform, const std::string& parent, const std::string& shape_resource_path, Eigen::Vector3d scale, const KDL::RigidBodyInertia& inertia, bool update_collision_scene)
+void Scene::AddObject(const std::string& name, const KDL::Frame& transform, const std::string& parent, const std::string& shape_resource_path, const Eigen::Vector3d& scale, const KDL::RigidBodyInertia& inertia, const Eigen::Vector4d& color, bool update_collision_scene)
 {
     if (kinematica_.DoesLinkWithNameExist(name)) ThrowPretty("Link '" << name << "' already exists in the scene!");
     std::string parent_name = (parent == "") ? kinematica_.GetRootFrameName() : parent;
     if (!kinematica_.DoesLinkWithNameExist(parent_name)) ThrowPretty("Can't find parent '" << parent_name << "'!");
     Eigen::Isometry3d pose;
     tf::transformKDLToEigen(transform, pose);
-    custom_links_.push_back(kinematica_.AddElement(name, pose, parent_name, shape_resource_path, scale, inertia));
+    custom_links_.push_back(kinematica_.AddElement(name, pose, parent_name, shape_resource_path, scale, inertia, color));
     UpdateSceneFrames();
     UpdateInternalFrames();
     if (update_collision_scene) UpdateCollisionObjects();
 }
 
-void Scene::AddObjectToEnvironment(const std::string& name, const KDL::Frame& transform, shapes::ShapeConstPtr shape, const Eigen::Vector4d& colour, const bool& update_collision_scene)
+void Scene::AddObjectToEnvironment(const std::string& name, const KDL::Frame& transform, shapes::ShapeConstPtr shape, const Eigen::Vector4d& color, const bool update_collision_scene)
 {
     if (kinematica_.HasModelLink(name))
     {
@@ -697,7 +735,7 @@ void Scene::AddObjectToEnvironment(const std::string& name, const KDL::Frame& tr
     Eigen::Isometry3d pose;
     tf::transformKDLToEigen(transform, pose);
     ps_->getWorldNonConst()->addToObject(name, shape, pose);
-    ps_->setObjectColor(name, GetColor(colour));
+    ps_->setObjectColor(name, GetColor(color));
     UpdateSceneFrames();
     if (update_collision_scene) UpdateInternalFrames();
 }
@@ -732,6 +770,11 @@ void Scene::AttachObjectLocal(const std::string& name, const std::string& parent
 {
     kinematica_.ChangeParent(name, parent, pose, true);
     attached_objects_[name] = AttachedObject(parent, pose);
+}
+
+void Scene::AttachObjectLocal(const std::string& name, const std::string& parent, const Eigen::VectorXd& pose)
+{
+    AttachObjectLocal(name, parent, GetFrame(pose));
 }
 
 void Scene::DetachObject(const std::string& name)
@@ -781,4 +824,4 @@ void Scene::RemoveTrajectory(const std::string& link)
     it->second.first.lock()->is_trajectory_generated = false;
     trajectory_generators_.erase(it);
 }
-}
+}  // namespace exotica

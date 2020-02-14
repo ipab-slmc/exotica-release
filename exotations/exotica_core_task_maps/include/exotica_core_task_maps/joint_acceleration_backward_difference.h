@@ -48,10 +48,7 @@ namespace exotica
 class JointAccelerationBackwardDifference : public TaskMap, public Instantiable<JointAccelerationBackwardDifferenceInitializer>
 {
 public:
-    JointAccelerationBackwardDifference();
-    virtual ~JointAccelerationBackwardDifference();
     void AssignScene(ScenePtr scene) override;
-    void Instantiate(JointAccelerationBackwardDifferenceInitializer& init) override;
 
     /// \brief Logs previous joint state.
     /// SetPreviousJointState must be called after solve is called in a Python/C++ script is called
@@ -67,14 +64,12 @@ public:
     int TaskSpaceDim() override;
 
 private:
-    JointAccelerationBackwardDifferenceInitializer init_;  ///< Task map initializer.
-    ScenePtr scene_;                                       ///< Scene pointer.
-    int N_;                                                ///< Number of dofs for robot.
-    Eigen::Vector2d backward_difference_params_;           ///< Binomial cooeficient parameters.
-    Eigen::MatrixXd q_;                                    ///< Log of previous two joint states.
-    Eigen::VectorXd qbd_;                                  ///< x+qbd_ is a simplifed estimate of the second time derivative.
-    Eigen::MatrixXd I_;                                    ///< Identity matrix.
-    double dt_inv_;                                        ///< Frequency (1/dt)
+    ScenePtr scene_;                              ///< Scene pointer.
+    int N_;                                       ///< Number of dofs for robot.
+    Eigen::Vector2d backward_difference_params_;  ///< Binomial cooeficient parameters.
+    Eigen::MatrixXd q_;                           ///< Log of previous two joint states.
+    Eigen::VectorXd qbd_;                         ///< x+qbd_ is a simplifed estimate of the second time derivative.
+    Eigen::MatrixXd I_;                           ///< Identity matrix.
 };
 }
 
