@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018, University of Edinburgh
+// Copyright (c) 2018, Wolfgang Merkt
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,37 +27,30 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#ifndef EXOTICA_CORE_TASK_SPACE_VECTOR_H_
-#define EXOTICA_CORE_TASK_SPACE_VECTOR_H_
+#ifndef EXOTICA_CORE_VISUALIZATION_MOVEIT_H_
+#define EXOTICA_CORE_VISUALIZATION_MOVEIT_H_
 
-#include <exotica_core/tools/conversions.h>
-#include <Eigen/Dense>
-#include <kdl/frames.hpp>
-#include <vector>
+#include <exotica_core/scene.h>
+#include <exotica_core/tools/uncopyable.h>
+
+#include <ros/ros.h>
 
 namespace exotica
 {
-struct TaskVectorEntry
+class VisualizationMoveIt : public Uncopyable
 {
-    RotationType type = RotationType::RPY;
-    int id = 0;
+public:
+    VisualizationMoveIt(ScenePtr scene);
+    virtual ~VisualizationMoveIt();
 
-    TaskVectorEntry();
-    TaskVectorEntry(int _id, RotationType _type);
-    static std::vector<TaskVectorEntry> reindex(const std::vector<TaskVectorEntry>& _map, int _old_start, int _new_start);
+    void Initialize();
+
+    void DisplayTrajectory(Eigen::MatrixXdRefConst trajectory);
+
+private:
+    ScenePtr scene_ = std::make_shared<Scene>(nullptr);
+    ros::Publisher trajectory_pub_;
 };
+}  // namespace exotica
 
-struct TaskSpaceVector
-{
-    TaskSpaceVector();
-    ~TaskSpaceVector();
-    TaskSpaceVector& operator=(std::initializer_list<double> other);
-    Eigen::VectorXd operator-(const TaskSpaceVector& other);
-    void SetZero(const int n);
-
-    Eigen::VectorXd data;
-    std::vector<TaskVectorEntry> map;
-};
-}
-
-#endif  // EXOTICA_CORE_TASK_SPACE_VECTOR_H_
+#endif  // EXOTICA_CORE_VISUALIZATION_MOVEIT_H_

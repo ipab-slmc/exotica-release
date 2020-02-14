@@ -27,37 +27,19 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#ifndef EXOTICA_CORE_TASK_SPACE_VECTOR_H_
-#define EXOTICA_CORE_TASK_SPACE_VECTOR_H_
+#ifndef EXOTICA_CORE_FEEDBACK_MOTION_SOLVER_H_
+#define EXOTICA_CORE_FEEDBACK_MOTION_SOLVER_H_
 
-#include <exotica_core/tools/conversions.h>
-#include <Eigen/Dense>
-#include <kdl/frames.hpp>
-#include <vector>
+#include <exotica_core/motion_solver.h>
 
 namespace exotica
 {
-struct TaskVectorEntry
+class FeedbackMotionSolver : public MotionSolver
 {
-    RotationType type = RotationType::RPY;
-    int id = 0;
-
-    TaskVectorEntry();
-    TaskVectorEntry(int _id, RotationType _type);
-    static std::vector<TaskVectorEntry> reindex(const std::vector<TaskVectorEntry>& _map, int _old_start, int _new_start);
-};
-
-struct TaskSpaceVector
-{
-    TaskSpaceVector();
-    ~TaskSpaceVector();
-    TaskSpaceVector& operator=(std::initializer_list<double> other);
-    Eigen::VectorXd operator-(const TaskSpaceVector& other);
-    void SetZero(const int n);
-
-    Eigen::VectorXd data;
-    std::vector<TaskVectorEntry> map;
+public:
+    // \brief Returns a control input given the state x and timestep t.
+    virtual Eigen::VectorXd GetFeedbackControl(Eigen::VectorXdRefConst x, int t) const = 0;
 };
 }
 
-#endif  // EXOTICA_CORE_TASK_SPACE_VECTOR_H_
+#endif  // EXOTICA_CORE_MOTION_SOLVER_H_
