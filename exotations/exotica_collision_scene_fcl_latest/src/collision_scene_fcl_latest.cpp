@@ -29,26 +29,35 @@
 
 #include <exotica_collision_scene_fcl_latest/collision_scene_fcl_latest.h>
 #include <exotica_core/factory.h>
+#include <exotica_core/scene.h>
+
+#include <geometric_shapes/mesh_operations.h>
+#include <geometric_shapes/shape_operations.h>
 
 REGISTER_COLLISION_SCENE_TYPE("CollisionSceneFCLLatest", exotica::CollisionSceneFCLLatest)
 
 #define CONTINUOUS_COLLISION_USE_ADVANCED_SETTINGS
 // #define CONTINUOUS_COLLISION_DEBUG
 
-namespace fcl_convert
-{
-// ** Do not remove the inline ** It causes an epic memory bug in the transforms.
-//      Fixed in July 2018 and July 2019.
-inline fcl::Transform3d KDL2fcl(const KDL::Frame& frame)
-{
-    Eigen::Isometry3d ret;
-    tf::transformKDLToEigen(frame, ret);
-    return ret;
-}
-}
-
 namespace exotica
 {
+// This function was the source of a massive bug that reappeared in July 2018, July 2019, and November 2020.
+// It was mostly due to a symbol crash between the two fcl_conversion implementations. I.e., the naming and
+// namespace is now kept different from the implementation in the CollisionSceneFCLDefault
+inline fcl::Transform3d transformKDLToFCL(const KDL::Frame& frame)
+{
+    fcl::Transform3d ret;
+    ret.translation() = Eigen::Map<const Eigen::Vector3d>(frame.p.data);
+    ret.linear() = Eigen::Map<const Eigen::Matrix3d>(frame.M.data);
+    return ret;
+}
+
+void transformFCLToKDL(const fcl::Transform3d& tf, KDL::Frame& frame)
+{
+    Eigen::Map<Eigen::Vector3d>(frame.p.data) = tf.translation();
+    Eigen::Map<Eigen::Matrix3d>(frame.M.data) = tf.linear().matrix();
+}
+
 inline bool IsRobotLink(std::shared_ptr<KinematicElement> e)
 {
     return e->is_robot_link || e->closest_robot_link.lock();
@@ -80,9 +89,11 @@ void CollisionSceneFCLLatest::UpdateCollisionObjects(const std::map<std::string,
 
     long i = 0;
 
+    auto world_links_to_exclude_from_collision_scene = scene_.lock()->get_world_links_to_exclude_from_collision_scene();
     for (const auto& object : objects)
     {
         // Check whether object is excluded as a world collision object:
+        // TODO: This works differently than in the Scene: There it's the original link name, here the frame_name!
         if (world_links_to_exclude_from_collision_scene.count(object.first) > 0)
         {
             if (debug_) HIGHLIGHT_NAMED("CollisionSceneFCLLatest::UpdateCollisionObject", object.first << " is excluded, skipping.");
@@ -115,6 +126,7 @@ void CollisionSceneFCLLatest::UpdateCollisionObjects(const std::map<std::string,
     // Register objects with the BroadPhaseCollisionManager
     broad_phase_collision_manager_->clear();
     broad_phase_collision_manager_->registerObjects(fcl_objects_);
+    needs_update_of_collision_objects_ = false;
 }
 
 void CollisionSceneFCLLatest::UpdateCollisionObjectTransforms()
@@ -130,7 +142,14 @@ void CollisionSceneFCLLatest::UpdateCollisionObjectTransforms()
         {
             ThrowPretty("Expired pointer, this should not happen - make sure to call UpdateCollisionObjects() after UpdateSceneFrames()");
         }
-        collision_object->setTransform(fcl_convert::KDL2fcl(element->frame));
+
+        // Check for NaNs
+        if (std::isnan(element->frame.p.data[0]) || std::isnan(element->frame.p.data[1]) || std::isnan(element->frame.p.data[2]))
+        {
+            ThrowPretty("Transform for " << element->segment.getName() << " contains NaNs.");
+        }
+
+        collision_object->setTransform(transformKDLToFCL(element->frame));
         collision_object->computeAABB();
     }
 }
@@ -193,7 +212,7 @@ std::shared_ptr<fcl::CollisionObjectd> CollisionSceneFCLLatest::ConstructFclColl
         {
             auto s = dynamic_cast<const shapes::Cylinder*>(shape.get());
             bool degenerate_capsule = (s->length <= 2 * s->radius);
-            if (!replace_cylinders_with_capsules || degenerate_capsule)
+            if (!replace_cylinders_with_capsules_ || degenerate_capsule)
             {
                 geometry.reset(new fcl::Cylinderd(s->radius, s->length));
             }
@@ -404,10 +423,8 @@ void CollisionSceneFCLLatest::ComputeDistance(fcl::CollisionObjectd* o1, fcl::Co
             p.normal1 = -contact.normal;
             p.normal2 = contact.normal;
 
-            KDL::Vector c1 = KDL::Vector(p_WAc(0), p_WAc(1), p_WAc(2));
-            KDL::Vector c2 = KDL::Vector(p_WBc(0), p_WBc(1), p_WBc(2));
-            tf::vectorKDLToEigen(c1, p.contact1);
-            tf::vectorKDLToEigen(c2, p.contact2);
+            p.contact1 = p_WAc;
+            p.contact2 = p_WBc;
 
             data->Distance = std::min(data->Distance, p.distance);
             data->proxies.push_back(p);
@@ -488,8 +505,8 @@ void CollisionSceneFCLLatest::ComputeDistance(fcl::CollisionObjectd* o1, fcl::Co
         }
     }
 
-    tf::vectorKDLToEigen(c1, p.contact1);
-    tf::vectorKDLToEigen(c2, p.contact2);
+    p.contact1 = Eigen::Map<Eigen::Vector3d>(c1.data);
+    p.contact2 = Eigen::Map<Eigen::Vector3d>(c2.data);
 
     // On touching contact, the normal would be ill-defined. Thus, use the shape centre of the opposite shape as a proxy contact.
     if (touching_contact)
@@ -502,8 +519,8 @@ void CollisionSceneFCLLatest::ComputeDistance(fcl::CollisionObjectd* o1, fcl::Co
     KDL::Vector n2 = c1 - c2;
     n1.Normalize();
     n2.Normalize();
-    tf::vectorKDLToEigen(n1, p.normal1);
-    tf::vectorKDLToEigen(n2, p.normal2);
+    p.normal1 = Eigen::Map<Eigen::Vector3d>(n1.data);
+    p.normal2 = Eigen::Map<Eigen::Vector3d>(n2.data);
 
     data->Distance = std::min(data->Distance, p.distance);
     data->proxies.push_back(p);
@@ -632,8 +649,13 @@ std::vector<CollisionProxy> CollisionSceneFCLLatest::GetCollisionDistance(
         {
             bool allowedToCollide = false;
             for (fcl::CollisionObjectd* o1_shape : shapes1)
+            {
                 if (IsAllowedToCollide(o1_shape, o, data.self, data.scene))
+                {
                     allowedToCollide = true;
+                    break;
+                }
+            }
 
             if (allowedToCollide) shapes2.push_back(o);
         }
@@ -779,10 +801,10 @@ ContinuousCollisionProxy CollisionSceneFCLLatest::ContinuousCollisionCheck(
         return ret;
     }
 
-    fcl::Transform3d tf1_beg_fcl = fcl_convert::KDL2fcl(tf1_beg);
-    fcl::Transform3d tf1_end_fcl = fcl_convert::KDL2fcl(tf1_end);
-    fcl::Transform3d tf2_beg_fcl = fcl_convert::KDL2fcl(tf2_beg);
-    fcl::Transform3d tf2_end_fcl = fcl_convert::KDL2fcl(tf2_end);
+    fcl::Transform3d tf1_beg_fcl = transformKDLToFCL(tf1_beg);
+    fcl::Transform3d tf1_end_fcl = transformKDLToFCL(tf1_end);
+    fcl::Transform3d tf2_beg_fcl = transformKDLToFCL(tf2_beg);
+    fcl::Transform3d tf2_end_fcl = transformKDLToFCL(tf2_end);
 
     if (!tf1_beg_fcl.matrix().allFinite())
     {
@@ -955,8 +977,8 @@ ContinuousCollisionProxy CollisionSceneFCLLatest::ContinuousCollisionCheck(
 #endif
     }
 
-    tf::transformEigenToKDL(static_cast<Eigen::Isometry3d>(result.contact_tf1), ret.contact_tf1);
-    tf::transformEigenToKDL(static_cast<Eigen::Isometry3d>(result.contact_tf2), ret.contact_tf2);
+    transformFCLToKDL(result.contact_tf1, ret.contact_tf1);
+    transformFCLToKDL(result.contact_tf2, ret.contact_tf2);
 
 #ifdef CONTINUOUS_COLLISION_DEBUG
     if (!ret.contact_pos.allFinite())
