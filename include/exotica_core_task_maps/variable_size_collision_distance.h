@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2020, University of Edinburgh, University of Oxford
+// Copyright (c) 2020, University of Oxford
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,39 +27,36 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#ifndef EXOTICA_CORE_TASK_MAPS_JOINTLIMIT_H_
-#define EXOTICA_CORE_TASK_MAPS_JOINTLIMIT_H_
+#ifndef EXOTICA_CORE_TASK_MAPS_VARIABLE_SIZE_COLLISION_DISTANCE_H_
+#define EXOTICA_CORE_TASK_MAPS_VARIABLE_SIZE_COLLISION_DISTANCE_H_
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include <exotica_core/task_map.h>
-
-#include <exotica_core_task_maps/joint_limit_initializer.h>
+#include <exotica_core_task_maps/variable_size_collision_distance_initializer.h>
 
 namespace exotica
 {
-///\brief	Implementation of joint limits task map.
-///			Note: we dont want to always stay at the centre of the joint range,
-///			be lazy as long as the joint is not too close to the low/high limits
-class JointLimit : public TaskMap, public Instantiable<JointLimitInitializer>
+class VariableSizeCollisionDistance : public TaskMap, public Instantiable<VariableSizeCollisionDistanceInitializer>
 {
 public:
     void AssignScene(ScenePtr scene) override;
 
-    void Update(Eigen::VectorXdRefConst q, Eigen::VectorXdRef phi) override;
-    void Update(Eigen::VectorXdRefConst q, Eigen::VectorXdRef phi, Eigen::MatrixXdRef jacobian) override;
-    void Update(Eigen::VectorXdRefConst q, Eigen::VectorXdRef phi, Eigen::MatrixXdRef jacobian, HessianRef hessian) override;
-
-    void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRefConst u, Eigen::VectorXdRef phi) override;
-    void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRefConst u, Eigen::VectorXdRef phi, Eigen::MatrixXdRef dphi_dx, Eigen::MatrixXdRef dphi_du) override;
-    void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRefConst u, Eigen::VectorXdRef phi, Eigen::MatrixXdRef dphi_dx, Eigen::MatrixXdRef dphi_du, HessianRef ddphi_ddx, HessianRef ddphi_ddu, HessianRef ddphi_dxdu) override;
-
+    void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi) override;
+    void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, Eigen::MatrixXdRef J) override;
     int TaskSpaceDim() override;
 
 private:
     void Initialize();
+    double world_margin_;
 
-    double safe_percentage_;
-    int N;
+    std::size_t dim_;
+    CollisionScenePtr cscene_;
+
+    void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, Eigen::MatrixXdRef J, bool updateJacobian = true);
 };
-}  // namespace
+}  // namespace exotica
 
-#endif  // EXOTICA_CORE_TASK_MAPS_JOINTLIMIT_H_
+#endif  // EXOTICA_CORE_TASK_MAPS_VARIABLE_SIZE_COLLISION_DISTANCE_H_
