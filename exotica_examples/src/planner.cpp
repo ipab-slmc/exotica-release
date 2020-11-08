@@ -66,15 +66,14 @@ void run()
             // The rest of the trajectory minimizes the control cost
             problem->SetRho("Frame", 0.0, t);
         }
-        problem->SetRho("Frame", 1e3, 99);
+        problem->SetRho("Frame", 1e3, -1);
     }
 
     // Create the initial configuration
-    Eigen::VectorXd q = Eigen::VectorXd::Zero(any_problem->N);
-    Eigen::MatrixXd solution;
     HIGHLIGHT("Calling solve()");
     {
         // Solve the problem using the AICO solver
+        Eigen::MatrixXd solution;
         any_solver->Solve(solution);
 
         ros::Rate loop_rate(50.0);
@@ -108,6 +107,6 @@ int main(int argc, char **argv)
     run();
 
     // Clean up
-    // Run this only after all the exoica classes have been disposed of!
+    // Run this only after all the exotica classes have been disposed of!
     Setup::Destroy();
 }
