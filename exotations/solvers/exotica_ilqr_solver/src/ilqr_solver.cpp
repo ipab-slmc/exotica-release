@@ -72,12 +72,10 @@ void ILQRSolver::BackwardPass()
     for (int t = T - 2; t >= 0; t--)
     {
         Eigen::VectorXd x = prob_->get_X(t), u = prob_->get_U(t);
-        Eigen::MatrixXd Ak = dynamics_solver_->fx(x, u), Bk = dynamics_solver_->fu(x, u),
+        dynamics_solver_->ComputeDerivatives(x, u);
+        Eigen::MatrixXd Ak = dynamics_solver_->get_Fx(), Bk = dynamics_solver_->get_Fu(),
                         Q = dt * prob_->get_Q(t);
 
-        // eq. 13-16
-        Ak.noalias() = Ak * dt + Eigen::MatrixXd::Identity(Ak.rows(), Ak.cols());
-        Bk.noalias() = Bk * dt;
         // this inverse is common for all factors
         // TODO: use LLT
         const Eigen::MatrixXd _inv =
@@ -135,8 +133,8 @@ void ILQRSolver::Solve(Eigen::MatrixXd& solution)
     Timer planning_timer, backward_pass_timer, line_search_timer;
 
     const int T = prob_->get_T();
-    const int NU = prob_->get_num_controls();
-    const int NX = prob_->get_num_positions() + prob_->get_num_velocities();
+    const int NU = prob_->GetScene()->get_num_controls();
+    const int NX = prob_->GetScene()->get_num_state();
     const double dt = dynamics_solver_->get_dt();
     prob_->ResetCostEvolution(GetNumberOfMaxIterations() + 1);
     prob_->PreUpdate();
