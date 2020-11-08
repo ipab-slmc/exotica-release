@@ -29,6 +29,8 @@
 
 #include <exotica_core/exotica_core.h>
 #include <exotica_core/tools/box_qp.h>
+#include <exotica_core/tools/box_qp_old.h>
+#include <exotica_core/tools/sparse_costs.h>
 #ifdef MSGPACK_FOUND
 #include <exotica_core/visualization_meshcat.h>
 #endif
@@ -39,6 +41,8 @@
 #include <pybind11/stl.h>
 
 #include <ros/package.h>
+
+#include <unsupported/Eigen/CXX11/Tensor>
 
 #if PY_MAJOR_VERSION < 3
 #define PY_OLDSTANDARD
@@ -173,7 +177,7 @@ void AddInitializers(py::module& module)
     for (Initializer& i : initializers)
     {
         std::string full_name = i.GetName();
-        std::string name = full_name.substr(8);
+        std::string name = full_name.substr(8);  // This removes the prefix "exotica/"
         known_initializers[full_name] = CreateInitializer(i);
         inits.def((name + "Initializer").c_str(), [i]() { return CreateInitializer(i); }, (name + "Initializer constructor.").c_str());
     }
@@ -254,6 +258,30 @@ public:
             }
             return true;
         }
+        else if (target.GetType() == "Eigen::Matrix<int, -1, 1, 0, -1, 1>")
+        {
+            if (IsPyString(value_py))
+            {
+                target.Set(ParseVector<int, Eigen::Dynamic>(PyAsStdString(value_py)));
+            }
+            else
+            {
+                target.Set(py::cast<Eigen::VectorXi>(value_py));
+            }
+            return true;
+        }
+        else if (target.GetType() == "Eigen::Matrix<double, 2, 1, 0, 2, 1>")
+        {
+            if (IsPyString(value_py))
+            {
+                target.Set(ParseVector<double, 2>(PyAsStdString(value_py)));
+            }
+            else
+            {
+                target.Set(py::cast<Eigen::Vector2d>(value_py));
+            }
+            return true;
+        }
         else if (target.GetType() == "Eigen::Matrix<double, 3, 1, 0, 3, 1>")
         {
             if (IsPyString(value_py))
@@ -313,8 +341,13 @@ public:
                 {
                     if (!PyToInit(PyList_GetItem(value_py, 0), tmp))
                     {
+                        WARNING("Could not create initializer :'(");
                         return false;
                     }
+                }
+                else
+                {
+                    WARNING("List size is greater than 1 - this should not happen: " << n);
                 }
                 target.Set(tmp);
             }
@@ -323,6 +356,7 @@ public:
                 Initializer tmp;
                 if (!PyToInit(value_py, tmp))
                 {
+                    WARNING("Could not convert Python value to exotica::Initializer");
                     return false;
                 }
                 target.Set(tmp);
@@ -339,11 +373,16 @@ public:
                 {
                     if (!PyToInit(PyList_GetItem(value_py, i), vec[i]))
                     {
+                        WARNING("Could not parse initializer in vector of initializers: #" << i);
                         return false;
                     }
                 }
                 target.Set(vec);
                 return true;
+            }
+            else
+            {
+                HIGHLIGHT("InitializerVectorType failed PyList_Check");
             }
         }
         else
@@ -356,13 +395,25 @@ public:
 
     bool PyToInit(PyObject* source, Initializer& ret)
     {
-        if (!PyTuple_CheckExact(source)) return false;
+        if (!PyTuple_CheckExact(source))
+        {
+            WARNING_NAMED("PyToInit", "Failed exact tuple check.");
+            return false;
+        }
 
         int tuple_size = PyTuple_Size(source);
-        if (tuple_size < 1 || tuple_size > 2) return false;
+        if (tuple_size < 1 || tuple_size > 2)
+        {
+            WARNING_NAMED("PyToInit", "Wrong sized tuple for exotica::Initializer: " << tuple_size);
+            return false;
+        }
 
         PyObject* const name_py = PyTuple_GetItem(source, 0);
-        if (!IsPyString(name_py)) return false;
+        if (!IsPyString(name_py))
+        {
+            WARNING_NAMED("PyToInit", "First element of exotica::Initializer-tuple is not a string.");
+            return false;
+        }
         const std::string initializer_name = PyAsStdString(name_py);
 
         const auto& it = known_initializers.find(initializer_name);
@@ -376,7 +427,11 @@ public:
         if (tuple_size == 2)
         {
             PyObject* const dict = PyTuple_GetItem(source, 1);
-            if (!PyDict_Check(dict)) return false;
+            if (!PyDict_Check(dict))
+            {
+                WARNING_NAMED("PyToInit", "Second element of exotica::Initializer-tuple is not a dict.");
+                return false;
+            }
 
             PyObject *key, *value_py;
             Py_ssize_t pos = 0;
@@ -384,6 +439,7 @@ public:
             while (PyDict_Next(dict, &pos, &key, &value_py))
             {
                 const std::string key_str = PyAsStdString(key);
+
                 if (ret.properties_.count(key_str))
                 {
                     if (!AddPropertyFromDict(ret.properties_.at(key_str), value_py))
@@ -394,7 +450,12 @@ public:
                 }
                 else
                 {
-                    HIGHLIGHT(initializer_name << ": Ignoring property '" << key_str << "'")
+                    // 2020-11-04: Replaced the ignoring behaviour with a warning that still adds the property to the initializer.
+                    // This resolves issue #719: Sometimes (e.g. for SphereCollision ), we do casting to derived types inside a TaskMap.
+                    // This requires having the properties added to the generic Initializer, even if the base initializer does not contain them.
+                    // HIGHLIGHT(initializer_name << ": Ignoring property '" << key_str << "'")
+                    ret.AddProperty(Property(key_str, false, boost::any(PyAsStdString(value_py))));
+                    // WARNING("Adding property '" << key_str << "' even though Initializer type '" << initializer_name << "' does not know this property.");
                 }
             }
         }
@@ -442,6 +503,14 @@ public:
         {
             PyDict_SetItemString(dict, name.c_str(), py::cast(boost::any_cast<Eigen::VectorXd>(prop.Get())).ptr());
         }
+        else if (prop.GetType() == "Eigen::Matrix<int, -1, 1, 0, -1, 1>")
+        {
+            PyDict_SetItemString(dict, name.c_str(), py::cast(boost::any_cast<Eigen::VectorXi>(prop.Get())).ptr());
+        }
+        else if (prop.GetType() == "Eigen::Matrix<double, 2, 1, 0, 2, 1>")
+        {
+            PyDict_SetItemString(dict, name.c_str(), py::cast(boost::any_cast<Eigen::Vector2d>(prop.Get())).ptr());
+        }
         else if (prop.GetType() == "Eigen::Matrix<double, 3, 1, 0, 3, 1>")
         {
             PyDict_SetItemString(dict, name.c_str(), py::cast(boost::any_cast<Eigen::Vector3d>(prop.Get())).ptr());
@@ -487,12 +556,118 @@ public:
         return handle(InitializerToTuple(src));
     }
 };
+}  // namespace detail
+}  // namespace pybind11
+
+template <class T>
+Hessian array_hessian(
+    pybind11::array_t<T> inArray)
+{
+    // request a buffer descriptor from Python
+    pybind11::buffer_info buffer_info = inArray.request();
+
+    // extract data an shape of input array
+    T* data = static_cast<T*>(buffer_info.ptr);
+    std::vector<ssize_t> shape = buffer_info.shape;
+
+    // wrap ndarray in Eigen::Map:
+    // the second template argument is the rank of the tensor and has to be
+    // known at compile time
+    Eigen::TensorMap<Eigen::Tensor<T, 3, Eigen::RowMajor>> in_tensor(
+        data, shape[0], shape[1], shape[2]);
+
+    Hessian hessian = Hessian::Constant(shape[0], Eigen::MatrixXd::Zero(shape[1], shape[2]));
+    for (int i = 0; i < shape[0]; i++)
+    {
+        for (int j = 0; j < shape[1]; j++)
+        {
+            for (int k = 0; k < shape[2]; k++)
+            {
+                hessian(i)(j, k) = in_tensor(i, j, k);
+            }
+        }
+    }
+    return hessian;
 }
+
+template <class T>
+py::handle hessian_array(
+    Hessian& inp)
+{
+    std::vector<ssize_t> shape(3);
+    shape[0] = inp.rows();
+    if (shape[0] > 0)
+    {
+        shape[1] = inp(0).rows();
+        shape[2] = inp(0).cols();
+    }
+    else
+    {
+        shape[1] = shape[2] = 0;
+    }
+
+    pybind11::array_t<T> array(
+        shape,                                                                // shape
+        {shape[1] * shape[2] * sizeof(T), shape[2] * sizeof(T), sizeof(T)});  // stride
+
+    Eigen::TensorMap<Eigen::Tensor<T, 3, Eigen::RowMajor>> in_tensor(
+        array.mutable_data(), shape[0], shape[1], shape[2]);
+    for (int i = 0; i < shape[0]; i++)
+    {
+        for (int j = 0; j < shape[1]; j++)
+        {
+            for (int k = 0; k < shape[2]; k++)
+            {
+                in_tensor(i, j, k) = inp(i)(j, k);
+            }
+        }
+    }
+    return array.release();
 }
+
+namespace pybind11
+{
+namespace detail
+{
+template <>
+struct type_caster<Hessian>
+{
+public:
+    /**
+         * This macro establishes the name 'inty' in
+         * function signatures and declares a local variable
+         * 'value' of type inty
+         */
+    PYBIND11_TYPE_CASTER(Hessian, _("Hessian"));
+
+    /**
+         * Conversion part 1 (Python->C++): convert a PyObject into a inty
+         * instance or return false upon failure. The second argument
+         * indicates whether implicit conversions should be applied.
+         */
+    bool load(handle src, bool)
+    {
+        value = array_hessian(py::cast<pybind11::array_t<Hessian::Scalar::Scalar>>(src.ptr()));
+        return true;
+    }
+
+    /**
+         * Conversion part 2 (C++ -> Python): convert an inty instance into
+         * a Python object. The second and third arguments are used to
+         * indicate the return value policy and parent object (for
+         * ``return_value_policy::reference_internal``) and are generally
+         * ignored by implicit casters.
+         */
+    static handle cast(Hessian src, return_value_policy /* policy */, handle /* parent */)
+    {
+        return hessian_array<Hessian::Scalar::Scalar>(src);
+    }
+};
+}
+}  // namespace pybind11::detail
 
 PYBIND11_MODULE(_pyexotica, module)
 {
-    //Setup::Instance();
     module.doc() = "Exotica Python wrapper";
 
     py::class_<Setup, std::unique_ptr<Setup, py::nodelete>> setup(module, "Setup");
@@ -505,6 +680,7 @@ PYBIND11_MODULE(_pyexotica, module)
     setup.def_static("create_solver", [](const Initializer& init) { return Setup::CreateSolver(init); }, py::return_value_policy::take_ownership);    // "Creates an instance of the solver identified by name parameter.", py::arg("solverType"), py::arg("prependExoticaNamespace"));
     setup.def_static("create_problem", [](const Initializer& init) { return Setup::CreateProblem(init); }, py::return_value_policy::take_ownership);  // "Creates an instance of the problem identified by name parameter.", py::arg("problemType"), py::arg("prependExoticaNamespace"));
     setup.def_static("create_scene", [](const Initializer& init) { return Setup::CreateScene(init); }, py::return_value_policy::take_ownership);
+    setup.def_static("create_dynamics_solver", [](const Initializer& init) { return Setup::CreateDynamicsSolver(init); }, py::return_value_policy::take_ownership);
     setup.def_static("print_supported_classes", &Setup::PrintSupportedClasses, "Print a list of available plug-ins sorted by class.");
     setup.def_static("get_initializers", &Setup::GetInitializers, py::return_value_policy::copy, "Returns a list of available initializers with all available parameters/arguments.");
     setup.def_static("get_package_path", &ros::package::getPath, "ROS package path resolution.");
@@ -536,6 +712,8 @@ PYBIND11_MODULE(_pyexotica, module)
     tools.def("parse_int", &ParseInt);
     tools.def("parse_int_list", &ParseIntList);
     tools.def("load_obj", [](const std::string& path) { Eigen::VectorXi tri; Eigen::VectorXd vert; LoadOBJ(LoadFile(path), tri, vert); return py::make_tuple(tri, vert); });
+    tools.def("load_octree", &LoadOctree);
+    tools.def("load_octree_as_shape", &LoadOctreeAsShape);
     tools.def("save_matrix", &SaveMatrix);
     tools.def("VectorTransform", &Eigen::VectorTransform);
     tools.def("IdentityTransform", &Eigen::IdentityTransform);
@@ -545,6 +723,17 @@ PYBIND11_MODULE(_pyexotica, module)
         return Trajectory(data, radius).ToString();
     },
               py::arg("data"), py::arg("max_radius") = 1.0);
+
+    py::module sparse_costs = tools.def_submodule("SparseCosts")
+                                  .def("huber_cost", &huber_cost)
+                                  .def("huber_jacobian", &huber_jacobian)
+                                  .def("huber_hessian", &huber_hessian)
+                                  .def("smooth_l1_cost", &smooth_l1_cost)
+                                  .def("smooth_l1_jacobian", &smooth_l1_jacobian)
+                                  .def("smooth_l1_hessian", &smooth_l1_hessian)
+                                  .def("pseudo_huber_cost", &pseudo_huber_cost)
+                                  .def("pseudo_huber_jacobian", &pseudo_huber_jacobian)
+                                  .def("pseudo_huber_hessian", &pseudo_huber_hessian);
 
     py::class_<Timer, std::shared_ptr<Timer>> timer(module, "Timer");
     timer.def(py::init());
@@ -567,6 +756,7 @@ PYBIND11_MODULE(_pyexotica, module)
         .value("GradientTolerance", TerminationCriterion::GradientTolerance)
         .value("Divergence", TerminationCriterion::Divergence)
         .value("UserDefined", TerminationCriterion::UserDefined)
+        .value("Convergence", TerminationCriterion::Convergence)
         .export_values();
 
     py::enum_<RotationType>(module, "RotationType")
@@ -645,7 +835,7 @@ PYBIND11_MODULE(_pyexotica, module)
         .def_readonly("startJ", &TaskMap::start_jacobian)
         .def_readonly("lengthJ", &TaskMap::length_jacobian)
         .def("task_space_dim", (int (TaskMap::*)()) & TaskMap::TaskSpaceDim)
-        .def("task_Space_jacobian_dim", &TaskMap::TaskSpaceJacobianDim);
+        .def("task_space_jacobian_dim", &TaskMap::TaskSpaceJacobianDim);
 
     py::class_<TaskIndexing>(module, "TaskIndexing")
         .def_readonly("id", &TaskIndexing::id)
@@ -663,8 +853,13 @@ PYBIND11_MODULE(_pyexotica, module)
         .def_readonly("ydiff", &TimeIndexedTask::ydiff)
         .def_readonly("Phi", &TimeIndexedTask::Phi)
         .def_readonly("rho", &TimeIndexedTask::rho)
-        // .def_readonly("hessian", &TimeIndexedTask::hessian)
-        .def_readonly("jacobian", &TimeIndexedTask::jacobian)
+        .def_readonly("hessian", &TimeIndexedTask::hessian)        // Kinematic
+        .def_readonly("jacobian", &TimeIndexedTask::jacobian)      // Kinematic
+        .def_readonly("dPhi_dx", &TimeIndexedTask::dPhi_dx)        // Dynamic
+        .def_readonly("dPhi_du", &TimeIndexedTask::dPhi_du)        // Dynamic
+        .def_readonly("ddPhi_ddx", &TimeIndexedTask::ddPhi_ddx)    // Dynamic
+        .def_readonly("ddPhi_ddu", &TimeIndexedTask::ddPhi_ddu)    // Dynamic
+        .def_readonly("ddPhi_dxdu", &TimeIndexedTask::ddPhi_dxdu)  // Dynamic
         .def_readonly("S", &TimeIndexedTask::S)
         .def_readonly("T", &TimeIndexedTask::T)
         .def_readonly("tasks", &TimeIndexedTask::tasks)
@@ -672,7 +867,9 @@ PYBIND11_MODULE(_pyexotica, module)
         .def("set_goal", &TimeIndexedTask::SetGoal)
         .def("get_goal", &TimeIndexedTask::GetGoal)
         .def("set_rho", &TimeIndexedTask::SetRho)
-        .def("get_rho", &TimeIndexedTask::GetRho);
+        .def("get_rho", &TimeIndexedTask::GetRho)
+        .def("get_task_error", &TimeIndexedTask::GetTaskError)
+        .def("get_S", &TimeIndexedTask::GetS);
 
     py::class_<EndPoseTask, std::shared_ptr<EndPoseTask>>(module, "EndPoseTask")
         .def_readonly("length_Phi", &EndPoseTask::length_Phi)
@@ -735,9 +932,9 @@ PYBIND11_MODULE(_pyexotica, module)
         .def("get_scene", &PlanningProblem::GetScene, py::return_value_policy::reference_internal)
         .def("__repr__", &PlanningProblem::Print, "String representation of the object", py::arg("prepend") = std::string(""))
         .def_readonly("N", &PlanningProblem::N)
-        .def_property_readonly("num_positions", &PlanningProblem::get_num_positions)
-        .def_property_readonly("num_velocities", &PlanningProblem::get_num_velocities)
-        .def_property_readonly("num_controls", &PlanningProblem::get_num_controls)
+        .def_property_readonly("num_positions", &PlanningProblem::get_num_positions)    // deprecated
+        .def_property_readonly("num_velocities", &PlanningProblem::get_num_velocities)  // deprecated
+        .def_property_readonly("num_controls", &PlanningProblem::get_num_controls)      // deprecated
         .def_property("start_state", &PlanningProblem::GetStartState, &PlanningProblem::SetStartState)
         .def_property("start_time", &PlanningProblem::GetStartTime, &PlanningProblem::SetStartTime)
         .def("get_number_of_problem_updates", &PlanningProblem::GetNumberOfProblemUpdates)
@@ -746,6 +943,7 @@ PYBIND11_MODULE(_pyexotica, module)
         .def("get_number_of_iterations", &PlanningProblem::GetNumberOfIterations)
         .def("pre_update", &PlanningProblem::PreUpdate)
         .def("is_valid", &PlanningProblem::IsValid)
+        .def("apply_start_state", &PlanningProblem::ApplyStartState)
         .def_readonly("termination_criterion", &PlanningProblem::termination_criterion);
 
     // Problem types
@@ -952,25 +1150,40 @@ PYBIND11_MODULE(_pyexotica, module)
     time_indexed_sampling_problem.def("set_rho_neq", &TimeIndexedSamplingProblem::SetRhoNEQ);
     time_indexed_sampling_problem.def("get_goal_neq", &TimeIndexedSamplingProblem::GetGoalNEQ);
     time_indexed_sampling_problem.def("get_rho_neq", &TimeIndexedSamplingProblem::GetRhoNEQ);
+    time_indexed_sampling_problem.def("is_valid", (bool (TimeIndexedSamplingProblem::*)(Eigen::VectorXdRefConst, const double&)) & TimeIndexedSamplingProblem::IsValid);
+
+    py::enum_<ControlCostLossTermType>(module, "ControlCostLossTermType")
+        // BimodalHuber = 3, SuperHuber = 4, <-- skipped as not actively used right now.
+        .value("Undefined", ControlCostLossTermType::Undefined)
+        .value("L2", ControlCostLossTermType::L2)
+        .value("SmoothL1", ControlCostLossTermType::SmoothL1)
+        .value("Huber", ControlCostLossTermType::Huber)
+        .value("PseudoHuber", ControlCostLossTermType::PseudoHuber)
+        .export_values();
 
     py::class_<DynamicTimeIndexedShootingProblem, std::shared_ptr<DynamicTimeIndexedShootingProblem>, PlanningProblem>(prob, "DynamicTimeIndexedShootingProblem")
-        .def("update", &DynamicTimeIndexedShootingProblem::Update)
+        .def("update", (void (DynamicTimeIndexedShootingProblem::*)(Eigen::VectorXdRefConst, Eigen::VectorXdRefConst, int)) & DynamicTimeIndexedShootingProblem::Update)
+        .def("update", (void (DynamicTimeIndexedShootingProblem::*)(Eigen::VectorXdRefConst, int)) & DynamicTimeIndexedShootingProblem::Update)
+        .def("update_terminal_state", &DynamicTimeIndexedShootingProblem::UpdateTerminalState)
         .def_property("X", static_cast<const Eigen::MatrixXd& (DynamicTimeIndexedShootingProblem::*)(void)const>(&DynamicTimeIndexedShootingProblem::get_X), &DynamicTimeIndexedShootingProblem::set_X)
         .def_property("U", static_cast<const Eigen::MatrixXd& (DynamicTimeIndexedShootingProblem::*)(void)const>(&DynamicTimeIndexedShootingProblem::get_U), &DynamicTimeIndexedShootingProblem::set_U)
         .def_property("X_star", &DynamicTimeIndexedShootingProblem::get_X_star, &DynamicTimeIndexedShootingProblem::set_X_star)
         .def_property_readonly("tau", &DynamicTimeIndexedShootingProblem::get_tau)
         .def_property("T", &DynamicTimeIndexedShootingProblem::get_T, &DynamicTimeIndexedShootingProblem::set_T)
-        .def("dynamics", &DynamicTimeIndexedShootingProblem::Dynamics)
-        .def("simulate", &DynamicTimeIndexedShootingProblem::Simulate)
+        .def_property("loss_type", &DynamicTimeIndexedShootingProblem::get_loss_type, &DynamicTimeIndexedShootingProblem::set_loss_type)
+        .def_property("control_cost_weight", &DynamicTimeIndexedShootingProblem::get_control_cost_weight, &DynamicTimeIndexedShootingProblem::set_control_cost_weight)
         .def("get_Q", &DynamicTimeIndexedShootingProblem::get_Q)
         .def("set_Q", &DynamicTimeIndexedShootingProblem::set_Q)
         .def_readonly("Phi", &DynamicTimeIndexedShootingProblem::Phi)
-        .def_readonly("jacobian", &DynamicTimeIndexedShootingProblem::jacobian)
+        .def_readonly("dPhi_dx", &DynamicTimeIndexedShootingProblem::dPhi_dx)
         .def_readonly("cost", &DynamicTimeIndexedShootingProblem::cost)
         .def("get_state_cost", &DynamicTimeIndexedShootingProblem::GetStateCost)
         .def("get_state_cost_jacobian", &DynamicTimeIndexedShootingProblem::GetStateCostJacobian)
+        .def("get_state_cost_hessian", &DynamicTimeIndexedShootingProblem::GetStateCostHessian)
         .def("get_control_cost", &DynamicTimeIndexedShootingProblem::GetControlCost)
-        .def("get_control_cost_jacobian", &DynamicTimeIndexedShootingProblem::GetControlCostJacobian);
+        .def("get_control_cost_jacobian", &DynamicTimeIndexedShootingProblem::GetControlCostJacobian)
+        .def("get_control_cost_hessian", &DynamicTimeIndexedShootingProblem::GetControlCostHessian)
+        .def("get_state_cost_hessian", &DynamicTimeIndexedShootingProblem::GetStateControlCostHessian);
 
     py::class_<CollisionProxy, std::shared_ptr<CollisionProxy>> collision_proxy(module, "CollisionProxy");
     collision_proxy.def(py::init());
@@ -998,6 +1211,12 @@ PYBIND11_MODULE(_pyexotica, module)
     continuous_collision_proxy.def("__repr__", &ContinuousCollisionProxy::Print);
 
     py::class_<Scene, std::shared_ptr<Scene>, Object> scene(module, "Scene");
+    scene.def_property_readonly("num_positions", &Scene::get_num_positions);
+    scene.def_property_readonly("num_velocities", &Scene::get_num_velocities);
+    scene.def_property_readonly("num_controls", &Scene::get_num_controls);
+    scene.def_property_readonly("num_state", &Scene::get_num_state);
+    scene.def_property_readonly("num_state_derivative", &Scene::get_num_state_derivative);
+    scene.def_property_readonly("has_quaternion_floating_base", &Scene::get_has_quaternion_floating_base);
     scene.def("update", &Scene::Update, py::arg("x"), py::arg("t") = 0.0);
     scene.def("get_controlled_joint_names", (std::vector<std::string>(Scene::*)()) & Scene::GetControlledJointNames);
     scene.def("get_controlled_link_names", &Scene::GetControlledLinkNames);
@@ -1017,7 +1236,7 @@ PYBIND11_MODULE(_pyexotica, module)
         return frame_names;
     });
     scene.def("set_model_state", (void (Scene::*)(Eigen::VectorXdRefConst, double, bool)) & Scene::SetModelState, py::arg("x"), py::arg("t") = 0.0, py::arg("update_trajectory") = false);
-    scene.def("set_model_state_map", (void (Scene::*)(std::map<std::string, double>, double, bool)) & Scene::SetModelState, py::arg("x"), py::arg("t") = 0.0, py::arg("update_trajectory") = false);
+    scene.def("set_model_state_map", (void (Scene::*)(const std::map<std::string, double>&, double, bool)) & Scene::SetModelState, py::arg("x"), py::arg("t") = 0.0, py::arg("update_trajectory") = false);
     scene.def("get_controlled_state", &Scene::GetControlledState);
     scene.def("publish_scene", &Scene::PublishScene);
     scene.def("publish_proxies", &Scene::PublishProxies);
@@ -1071,6 +1290,9 @@ PYBIND11_MODULE(_pyexotica, module)
     scene.def("jacobian", [](Scene* instance, const std::string& e1, const KDL::Frame& o1, const std::string& e2, const KDL::Frame& o2) { return instance->GetKinematicTree().Jacobian(e1, o1, e2, o2); });
     scene.def("jacobian", [](Scene* instance, const std::string& e1, const std::string& e2) { return instance->GetKinematicTree().Jacobian(e1, KDL::Frame(), e2, KDL::Frame()); });
     scene.def("jacobian", [](Scene* instance, const std::string& e1) { return instance->GetKinematicTree().Jacobian(e1, KDL::Frame(), "", KDL::Frame()); });
+    scene.def("hessian", [](Scene* instance, const std::string& e1, const KDL::Frame& o1, const std::string& e2, const KDL::Frame& o2) { return instance->GetKinematicTree().Hessian(e1, o1, e2, o2); });
+    scene.def("hessian", [](Scene* instance, const std::string& e1, const std::string& e2) { return instance->GetKinematicTree().Hessian(e1, KDL::Frame(), e2, KDL::Frame()); });
+    scene.def("hessian", [](Scene* instance, const std::string& e1) { return instance->GetKinematicTree().Hessian(e1, KDL::Frame(), "", KDL::Frame()); });
     scene.def("add_trajectory_from_file", &Scene::AddTrajectoryFromFile);
     scene.def("add_trajectory", (void (Scene::*)(const std::string&, const std::string&)) & Scene::AddTrajectory);
     scene.def("get_trajectory", [](Scene* instance, const std::string& link) { return instance->GetTrajectory(link)->ToString(); });
@@ -1101,12 +1323,13 @@ PYBIND11_MODULE(_pyexotica, module)
     scene.def("remove_object", &Scene::RemoveObject);
     scene.def_property_readonly("model_link_to_collision_link_map", &Scene::GetModelLinkToCollisionLinkMap);
     scene.def_property_readonly("controlled_joint_to_collision_link_map", &Scene::GetControlledJointToCollisionLinkMap);
+    scene.def_property_readonly("world_links_to_exclude_from_collision_scene", &Scene::get_world_links_to_exclude_from_collision_scene);
 
     py::class_<CollisionScene, std::shared_ptr<CollisionScene>> collision_scene(module, "CollisionScene");
     // TODO: expose IsStateValid, IsCollisionFree, GetCollisionDistance, GetCollisionWorldLinks, GetCollisionRobotLinks, GetTranslation
     collision_scene.def_property("always_externally_updated_collision_scene", &CollisionScene::GetAlwaysExternallyUpdatedCollisionScene, &CollisionScene::SetAlwaysExternallyUpdatedCollisionScene);
     collision_scene.def_property("replace_primitive_shapes_with_meshes", &CollisionScene::GetReplacePrimitiveShapesWithMeshes, &CollisionScene::SetReplacePrimitiveShapesWithMeshes);
-    collision_scene.def_readwrite("replace_cylinders_with_capsules", &CollisionScene::replace_cylinders_with_capsules);
+    collision_scene.def_property("replace_cylinders_with_capsules", &CollisionScene::get_replace_cylinders_with_capsules, &CollisionScene::set_replace_cylinders_with_capsules);
     collision_scene.def_property("robot_link_scale", &CollisionScene::GetRobotLinkScale, &CollisionScene::SetRobotLinkScale);
     collision_scene.def_property("world_link_scale", &CollisionScene::GetWorldLinkScale, &CollisionScene::SetWorldLinkScale);
     collision_scene.def_property("robot_link_padding", &CollisionScene::GetRobotLinkPadding, &CollisionScene::SetRobotLinkPadding);
@@ -1115,13 +1338,14 @@ PYBIND11_MODULE(_pyexotica, module)
     collision_scene.def("continuous_collision_check", &CollisionScene::ContinuousCollisionCheck);
     collision_scene.def("get_robot_to_robot_collision_distance", &CollisionScene::GetRobotToRobotCollisionDistance);
     collision_scene.def("get_robot_to_world_collision_distance", &CollisionScene::GetRobotToWorldCollisionDistance);
+    collision_scene.def("get_translation", &CollisionScene::GetTranslation);
 
     py::class_<VisualizationMoveIt> visualization_moveit(module, "VisualizationMoveIt");
     visualization_moveit.def(py::init<ScenePtr>());
     visualization_moveit.def("display_trajectory", &VisualizationMoveIt::DisplayTrajectory);
 #ifdef MSGPACK_FOUND
     py::class_<VisualizationMeshcat> visualization_meshcat(module, "VisualizationMeshcat");
-    visualization_meshcat.def(py::init<ScenePtr, const std::string&, bool>(), py::arg("scene"), py::arg("url"), py::arg("use_mesh_materials") = true);
+    visualization_meshcat.def(py::init<ScenePtr, const std::string&, bool, const std::string&>(), py::arg("scene"), py::arg("url"), py::arg("use_mesh_materials") = true, py::arg("file_url") = "");
     visualization_meshcat.def("display_scene", &VisualizationMeshcat::DisplayScene, py::arg("use_mesh_materials") = true);
     visualization_meshcat.def("display_state", &VisualizationMeshcat::DisplayState, py::arg("state"), py::arg("t") = 0.0);
     visualization_meshcat.def("display_trajectory", &VisualizationMeshcat::DisplayTrajectory, py::arg("trajectory"), py::arg("dt") = 1.0);
@@ -1138,7 +1362,7 @@ PYBIND11_MODULE(_pyexotica, module)
     py::module kin = module.def_submodule("Kinematics", "Kinematics submodule.");
     py::class_<KinematicTree, std::shared_ptr<KinematicTree>> kinematic_tree(kin, "KinematicTree");
     kinematic_tree.def_readwrite("debug_mode", &KinematicTree::debug);
-    kinematic_tree.def("publish_frames", &KinematicTree::PublishFrames);
+    kinematic_tree.def("publish_frames", &KinematicTree::PublishFrames, py::arg("tf_prefix") = "exotica");
     kinematic_tree.def("get_root_frame_name", &KinematicTree::GetRootFrameName);
     kinematic_tree.def("get_root_joint_name", &KinematicTree::GetRootJointName);
     kinematic_tree.def("get_kinematic_chain", &KinematicTree::GetKinematicChain);
@@ -1151,6 +1375,7 @@ PYBIND11_MODULE(_pyexotica, module)
     kinematic_tree.def("get_random_controlled_state", &KinematicTree::GetRandomControlledState);
     kinematic_tree.def("get_num_model_joints", &KinematicTree::GetNumModelJoints);
     kinematic_tree.def("get_num_controlled_joints", &KinematicTree::GetNumControlledJoints);
+    kinematic_tree.def("find_kinematic_element_by_name", &KinematicTree::FindKinematicElementByName);
 
     // joints and links that describe the full state of the robot
     kinematic_tree.def("get_model_link_names", &KinematicTree::GetModelLinkNames);
@@ -1165,8 +1390,15 @@ PYBIND11_MODULE(_pyexotica, module)
     kinematic_tree.def("reset_joint_limits", &KinematicTree::ResetJointLimits);
     kinematic_tree.def("set_joint_limits_lower", &KinematicTree::SetJointLimitsLower);
     kinematic_tree.def("set_joint_limits_upper", &KinematicTree::SetJointLimitsUpper);
-    kinematic_tree.def("set_floating_base_limits_pos_xyz_euler_zyx", &KinematicTree::SetFloatingBaseLimitsPosXYZEulerZYX);
-    kinematic_tree.def("set_planar_base_limits_pos_xy_euler_z", &KinematicTree::SetPlanarBaseLimitsPosXYEulerZ);
+    kinematic_tree.def("set_joint_velocity_limits", &KinematicTree::SetJointVelocityLimits);
+    kinematic_tree.def("set_joint_acceleration_limits", &KinematicTree::SetJointAccelerationLimits);
+    kinematic_tree.def("get_velocity_limits", &KinematicTree::GetVelocityLimits);
+    kinematic_tree.def("has_acceleration_limits", &KinematicTree::HasAccelerationLimits);
+    kinematic_tree.def("get_acceleration_limits", &KinematicTree::GetAccelerationLimits);
+    kinematic_tree.def("set_floating_base_limits_pos_xyz_euler_zyx", (void (KinematicTree::*)(const std::vector<double>&, const std::vector<double>&)) & KinematicTree::SetFloatingBaseLimitsPosXYZEulerZYX);
+    kinematic_tree.def("set_floating_base_limits_pos_xyz_euler_zyx", (void (KinematicTree::*)(const std::vector<double>&, const std::vector<double>&, const std::vector<double>&, const std::vector<double>&)) & KinematicTree::SetFloatingBaseLimitsPosXYZEulerZYX);
+    kinematic_tree.def("set_planar_base_limits_pos_xy_euler_z", (void (KinematicTree::*)(const std::vector<double>&, const std::vector<double>&)) & KinematicTree::SetPlanarBaseLimitsPosXYEulerZ);
+    kinematic_tree.def("set_planar_base_limits_pos_xy_euler_z", (void (KinematicTree::*)(const std::vector<double>&, const std::vector<double>&, const std::vector<double>&, const std::vector<double>&)) & KinematicTree::SetPlanarBaseLimitsPosXYEulerZ);
     kinematic_tree.def("get_used_joint_limits", &KinematicTree::GetUsedJointLimits);
 
     // Get full tree
@@ -1208,12 +1440,42 @@ PYBIND11_MODULE(_pyexotica, module)
         return vec;
     });
 
+    py::enum_<Integrator>(module, "Integrator")
+        .value("RK1", Integrator::RK1)
+        .value("SymplecticEuler", Integrator::SymplecticEuler)
+        .value("RK2", Integrator::RK2)
+        .value("RK4", Integrator::RK4)
+        .export_values();
+
     py::class_<DynamicsSolver, std::shared_ptr<DynamicsSolver>, Object>(module, "DynamicsSolver")
+        .def("F", &DynamicsSolver::F)
         .def("f", &DynamicsSolver::f)
         .def("fx", &DynamicsSolver::fx)
         .def("fu", &DynamicsSolver::fu)
+        .def("fx_fd", &DynamicsSolver::fx_fd)
+        .def("fu_fd", &DynamicsSolver::fu_fd)
+        .def_property_readonly("nq", &DynamicsSolver::get_num_positions)
+        .def_property_readonly("nv", &DynamicsSolver::get_num_velocities)
+        .def_property_readonly("nx", &DynamicsSolver::get_num_state)
+        .def_property_readonly("ndx", &DynamicsSolver::get_num_state_derivative)
+        .def_property_readonly("nu", &DynamicsSolver::get_num_controls)
+        .def_property_readonly("has_second_order_derivatives", &DynamicsSolver::get_has_second_order_derivatives)
+        .def_property("integrator", &DynamicsSolver::get_integrator, &DynamicsSolver::set_integrator)
         .def("get_position", &DynamicsSolver::GetPosition)
         .def("simulate", &DynamicsSolver::Simulate)
+        .def("state_delta", &DynamicsSolver::StateDelta)
+        .def("state_delta_derivative", &DynamicsSolver::dStateDelta)
+        .def("state_delta_second_derivative", &DynamicsSolver::ddStateDelta)
+        .def("compute_derivatives", &DynamicsSolver::ComputeDerivatives)
+        .def("get_Fx", &DynamicsSolver::get_Fx)
+        .def("get_Fu", &DynamicsSolver::get_Fu)
+        .def("get_fx", &DynamicsSolver::get_fx)
+        .def("get_fu", &DynamicsSolver::get_fu)
+        .def("integrate", [](DynamicsSolver* instance, Eigen::VectorXdRefConst x, Eigen::VectorXdRefConst u, const double dt) {
+            Eigen::VectorXd xout(instance->get_num_positions() + instance->get_num_velocities());
+            instance->Integrate(x, u, dt, xout);
+            return xout;
+        })
         .def_property_readonly("dt", &DynamicsSolver::get_dt, "dt");
 
     ////////////////////////////////////////////////////////////////////////////
@@ -1271,6 +1533,10 @@ PYBIND11_MODULE(_pyexotica, module)
         .def_readonly("vertex_count", &shapes::Mesh::vertex_count)
         .def_readonly("triangle_count", &shapes::Mesh::triangle_count);
 
+    py::class_<shapes::OcTree, shapes::Shape, std::shared_ptr<shapes::OcTree>>(module, "OcTree")
+        .def(py::init())
+        .def(py::init<const std::shared_ptr<const octomap::OcTree>&>());
+
     py::enum_<shapes::ShapeType>(module, "ShapeType")
         .value("UNKNOWN_SHAPE", shapes::ShapeType::UNKNOWN_SHAPE)
         .value("SPHERE", shapes::ShapeType::SPHERE)
@@ -1280,6 +1546,14 @@ PYBIND11_MODULE(_pyexotica, module)
         .value("PLANE", shapes::ShapeType::PLANE)
         .value("MESH", shapes::ShapeType::MESH)
         .value("OCTREE", shapes::ShapeType::OCTREE)
+        .export_values();
+
+    py::enum_<ArgumentPosition>(module, "ArgumentPosition")
+        .value("ARG0", ArgumentPosition::ARG0)
+        .value("ARG1", ArgumentPosition::ARG1)
+        .value("ARG2", ArgumentPosition::ARG2)
+        .value("ARG3", ArgumentPosition::ARG3)
+        .value("ARG4", ArgumentPosition::ARG4)
         .export_values();
 
     module.attr("version") = std::string(exotica::version);
@@ -1295,8 +1569,21 @@ PYBIND11_MODULE(_pyexotica, module)
                (BoxQPSolution(*)(const Eigen::MatrixXd& H, const Eigen::VectorXd& q,
                                  const Eigen::VectorXd& b_low, const Eigen::VectorXd& b_high,
                                  const Eigen::VectorXd& x_init, const double gamma,
-                                 const int max_iterations, const double epsilon, const double lambda)) &
-                   BoxQP);
+                                 const int max_iterations, const double epsilon, const double lambda,
+                                 bool use_polynomial_linesearch,
+                                 bool use_cholesky_factorization)) &
+                   BoxQP,
+               py::arg("H"), py::arg("q"), py::arg("b_low"), py::arg("b_high"), py::arg("x_init"), py::arg("gamma"), py::arg("max_iterations"), py::arg("epsilon"), py::arg("lambda"), py::arg("use_polynomial_linesearch") = true, py::arg("use_cholesky_factorization") = true);
+
+    module.def("box_qp_old",
+               (BoxQPSolution(*)(const Eigen::MatrixXd& H, const Eigen::VectorXd& q,
+                                 const Eigen::VectorXd& b_low, const Eigen::VectorXd& b_high,
+                                 const Eigen::VectorXd& x_init, const double gamma,
+                                 const int max_iterations, const double epsilon, const double lambda,
+                                 bool use_polynomial_linesearch,
+                                 bool use_cholesky_factorization)) &
+                   ExoticaBoxQP,
+               py::arg("H"), py::arg("q"), py::arg("b_low"), py::arg("b_high"), py::arg("x_init"), py::arg("gamma"), py::arg("max_iterations"), py::arg("epsilon"), py::arg("lambda"), py::arg("use_polynomial_linesearch") = false, py::arg("use_cholesky_factorization") = false);
 
     AddInitializers(module);
 
