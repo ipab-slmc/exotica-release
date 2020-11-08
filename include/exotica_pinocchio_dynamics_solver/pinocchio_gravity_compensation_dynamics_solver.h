@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019, Wolfgang Merkt
+// Copyright (c) 2020, University of Oxford
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,8 +27,8 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#ifndef EXOTICA_PINOCCHIO_DYNAMICS_SOLVER_PINOCCHIO_DYNAMICS_SOLVER_H_
-#define EXOTICA_PINOCCHIO_DYNAMICS_SOLVER_PINOCCHIO_DYNAMICS_SOLVER_H_
+#ifndef EXOTICA_PINOCCHIO_DYNAMICS_SOLVER_PINOCCHIO_GRAVITY_COMPENSATION_DYNAMICS_SOLVER_H_
+#define EXOTICA_PINOCCHIO_DYNAMICS_SOLVER_PINOCCHIO_GRAVITY_COMPENSATION_DYNAMICS_SOLVER_H_
 
 /// TODO: remove this pragma once Pinocchio removes neutralConfiguration/
 /// and fixes their deprecation warnings. (Relates to #547)
@@ -42,7 +42,7 @@
 #include <exotica_core/dynamics_solver.h>
 #include <exotica_core/scene.h>
 
-#include <exotica_pinocchio_dynamics_solver/pinocchio_dynamics_solver_initializer.h>
+#include <exotica_pinocchio_dynamics_solver/pinocchio_gravity_compensation_dynamics_solver_initializer.h>
 
 #include <pinocchio/multibody/data.hpp>
 #include <pinocchio/multibody/model.hpp>
@@ -51,7 +51,7 @@
 
 namespace exotica
 {
-class PinocchioDynamicsSolver : public DynamicsSolver, public Instantiable<PinocchioDynamicsSolverInitializer>
+class PinocchioDynamicsSolverWithGravityCompensation : public DynamicsSolver, public Instantiable<PinocchioDynamicsSolverWithGravityCompensationInitializer>
 {
 public:
     void AssignScene(ScenePtr scene_in) override;
@@ -60,7 +60,6 @@ public:
     StateDerivative fx(const StateVector& x, const ControlVector& u) override;
     ControlDerivative fu(const StateVector& x, const ControlVector& u) override;
     void ComputeDerivatives(const StateVector& x, const ControlVector& u) override;
-    ControlVector InverseDynamics(const StateVector& x) override;
     StateVector StateDelta(const StateVector& x_1, const StateVector& x_2) override;
     Eigen::MatrixXd dStateDelta(const StateVector& x_1, const StateVector& x_2, const ArgumentPosition first_or_second) override;
     void Integrate(const StateVector& x, const StateVector& dx, const double dt, StateVector& xout) override;
@@ -70,7 +69,12 @@ private:
     std::unique_ptr<pinocchio::Data> pinocchio_data_;
 
     Eigen::VectorXd xdot_analytic_;
+    Eigen::VectorXd u_nle_;
+    Eigen::VectorXd u_command_;
+    Eigen::VectorXd a_;
+    Eigen::MatrixXd du_command_dq_;
+    Eigen::MatrixXd du_nle_dq_;
 };
 }  // namespace exotica
 
-#endif  // EXOTICA_PINOCCHIO_DYNAMICS_SOLVER_PINOCCHIO_DYNAMICS_SOLVER_H_
+#endif  // EXOTICA_PINOCCHIO_DYNAMICS_SOLVER_PINOCCHIO_GRAVITY_COMPENSATION_DYNAMICS_SOLVER_H_
