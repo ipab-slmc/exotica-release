@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2020, University of Edinburgh, University of Oxford
+// Copyright (c) 2020, University of Oxford
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,19 +27,16 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#ifndef EXOTICA_CORE_TASK_MAPS_JOINTLIMIT_H_
-#define EXOTICA_CORE_TASK_MAPS_JOINTLIMIT_H_
+#ifndef EXOTICA_CORE_TASK_MAPS_CONTROL_REGULARIZATION_H_
+#define EXOTICA_CORE_TASK_MAPS_CONTROL_REGULARIZATION_H_
 
 #include <exotica_core/task_map.h>
 
-#include <exotica_core_task_maps/joint_limit_initializer.h>
+#include <exotica_core_task_maps/control_regularization_initializer.h>
 
 namespace exotica
 {
-///\brief	Implementation of joint limits task map.
-///			Note: we dont want to always stay at the centre of the joint range,
-///			be lazy as long as the joint is not too close to the low/high limits
-class JointLimit : public TaskMap, public Instantiable<JointLimitInitializer>
+class ControlRegularization : public TaskMap, public Instantiable<ControlRegularizationInitializer>
 {
 public:
     void AssignScene(ScenePtr scene) override;
@@ -54,12 +51,15 @@ public:
 
     int TaskSpaceDim() override;
 
+    const std::vector<int>& get_joint_map() const;
+    const Eigen::VectorXd& get_joint_ref() const;
+
 private:
     void Initialize();
-
-    double safe_percentage_;
-    int N;
+    int num_controlled_joints_;   ///! Number of controlled joints
+    std::vector<int> joint_map_;  ///! Subset selection matrix
+    Eigen::VectorXd joint_ref_;   ///! Joint reference value
 };
-}  // namespace
+}  // namespace exotica
 
-#endif  // EXOTICA_CORE_TASK_MAPS_JOINTLIMIT_H_
+#endif  // EXOTICA_CORE_TASK_MAPS_CONTROL_REGULARIZATION_H_
