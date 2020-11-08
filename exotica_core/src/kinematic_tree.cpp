@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018, University of Edinburgh
+// Copyright (c) 2018-2020, University of Edinburgh, University of Oxford
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,6 +36,8 @@
 #include <geometric_shapes/mesh_operations.h>
 #include <geometric_shapes/shape_operations.h>
 #include <moveit/robot_model/robot_model.h>
+#include <octomap_msgs/Octomap.h>
+#include <octomap_msgs/conversions.h>
 #include <tf_conversions/tf_kdl.h>
 #include <kdl/frames_io.hpp>
 #include <kdl_parser/kdl_parser.hpp>
@@ -56,8 +58,9 @@ KinematicResponse::KinematicResponse(KinematicRequestFlags _flags, int _size, in
     if (flags & KIN_FK_VEL) Phi_dot.resize(_size);
     KDL::Jacobian Jzero(_n);
     Jzero.data.setZero();
+    Hessian Hzero = Hessian::Constant(6, Eigen::MatrixXd::Zero(_n, _n));
     if (_flags & KIN_J) jacobian = ArrayJacobian::Constant(_size, Jzero);
-    if (_flags & KIN_J_DOT) jacobian_dot = ArrayJacobian::Constant(_size, Jzero);
+    if (_flags & KIN_H) hessian = ArrayHessian::Constant(_size, Hzero);
     x.setZero(_n);
 }
 
@@ -82,7 +85,7 @@ void KinematicSolution::Create(std::shared_ptr<KinematicResponse> solution)
     new (&X) Eigen::Map<Eigen::VectorXd>(solution->x.data(), solution->x.rows());
     if (solution->flags & KIN_FK_VEL) new (&Phi_dot) Eigen::Map<ArrayTwist>(solution->Phi_dot.data() + start, length);
     if (solution->flags & KIN_J) new (&jacobian) Eigen::Map<ArrayJacobian>(solution->jacobian.data() + start, length);
-    if (solution->flags & KIN_J_DOT) new (&jacobian_dot) Eigen::Map<ArrayJacobian>(solution->jacobian_dot.data() + start, length);
+    if (solution->flags & KIN_H) new (&hessian) Eigen::Map<ArrayHessian>(solution->hessian.data() + start, length);
 }
 
 int KinematicTree::GetNumControlledJoints() const
@@ -148,7 +151,13 @@ void KinematicTree::Instantiate(const std::string& joint_group, robot_model::Rob
     if (Server::IsRos())
     {
         shapes_pub_ = Server::Advertise<visualization_msgs::MarkerArray>(name_ + (name_ == "" ? "" : "/") + "CollisionShapes", 1, true);
+        octomap_pub_ = Server::Advertise<octomap_msgs::Octomap>(name_ + (name_ == "" ? "" : "/") + "OctoMap", 1, true);
         debug_scene_changed_ = true;
+        // Clear scene
+        visualization_msgs::MarkerArray msg;
+        msg.markers.resize(1);
+        msg.markers[0].action = 3;  // DELETE_ALL
+        shapes_pub_.publish(msg);
     }
 }
 
@@ -282,6 +291,7 @@ void KinematicTree::BuildTree(const KDL::Tree& robot_kinematics)
 
     num_joints_ = model_joints_names_.size();
     num_controlled_joints_ = controlled_joints_names_.size();
+    state_size_ = num_controlled_joints_;  // TODO: We should probably deprecate state_size_
     if (num_controlled_joints_ < 1) ThrowPretty("No update joints specified!");
     controlled_joints_.resize(num_controlled_joints_);
     for (std::shared_ptr<KinematicElement> Joint : model_tree_)
@@ -313,7 +323,11 @@ void KinematicTree::BuildTree(const KDL::Tree& robot_kinematics)
     model_tree_[0]->is_robot_link = false;
 
     joint_limits_ = Eigen::MatrixXd::Zero(num_controlled_joints_, 2);
+    velocity_limits_ = Eigen::VectorXd::Zero(num_controlled_joints_);
+    acceleration_limits_ = Eigen::VectorXd::Zero(num_controlled_joints_);
     ResetJointLimits();
+
+    if (debug) HIGHLIGHT_NAMED("KinematicTree::BuildTree", "Number of controlled joints: " << num_controlled_joints_ << " - Number of model joints: " << num_joints_);
 
     // Create random distributions for state sampling
     generator_ = std::mt19937(rd_());
@@ -376,6 +390,8 @@ void KinematicTree::BuildTree(const KDL::Tree& robot_kinematics)
                         visual.shape = std::shared_ptr<shapes::Mesh>(shapes::createMeshFromResource(mesh->filename));
                     }
                     break;
+                    default:
+                        ThrowPretty("Unknown geometry type: " << urdf_visual->geometry->type);
                 }
                 element->visual.push_back(visual);
                 ++i;
@@ -592,11 +608,10 @@ int KinematicTree::IsControlledLink(const std::string& link_name)
 std::shared_ptr<KinematicResponse> KinematicTree::RequestFrames(const KinematicsRequest& request)
 {
     flags_ = request.flags;
-    if (flags_ & KIN_J_DOT) flags_ = flags_ | KIN_J;
+    if (flags_ & KIN_H) flags_ = flags_ | KIN_J;
     solution_.reset(new KinematicResponse(flags_, request.frames.size(), num_controlled_joints_));
 
     state_size_ = num_controlled_joints_;
-    if (((flags_ & KIN_FK_VEL) || (flags_ & KIN_J_DOT))) state_size_ = num_controlled_joints_;
 
     for (int i = 0; i < request.frames.size(); ++i)
     {
@@ -653,7 +668,7 @@ void KinematicTree::Update(Eigen::VectorXdRefConst x)
     UpdateTree();
     UpdateFK();
     if (flags_ & KIN_J) UpdateJ();
-    if (flags_ & KIN_J && flags_ & KIN_J_DOT) UpdateJdot();
+    if (flags_ & KIN_J && flags_ & KIN_H) UpdateH();
     if (debug) PublishFrames();
 }
 
@@ -694,7 +709,7 @@ void KinematicTree::UpdateTree()
     }
 }
 
-void KinematicTree::PublishFrames()
+void KinematicTree::PublishFrames(const std::string& tf_prefix)
 {
     if (Server::IsRos())
     {
@@ -705,7 +720,7 @@ void KinematicTree::PublishFrames()
             {
                 tf::Transform T;
                 tf::transformKDLToTF(element.lock()->frame, T);
-                if (i > 0) debug_tree_[i - 1] = tf::StampedTransform(T, ros::Time::now(), tf::resolve("exotica", GetRootFrameName()), tf::resolve("exotica", element.lock()->segment.getName()));
+                if (i > 0) debug_tree_[i - 1] = tf::StampedTransform(T, ros::Time::now(), tf::resolve(tf_prefix, GetRootFrameName()), tf::resolve(tf_prefix, element.lock()->segment.getName()));
                 ++i;
             }
             Server::SendTransform(debug_tree_);
@@ -714,9 +729,9 @@ void KinematicTree::PublishFrames()
             {
                 tf::Transform T;
                 tf::transformKDLToTF(frame.temp_B, T);
-                debug_frames_[i * 2] = tf::StampedTransform(T, ros::Time::now(), tf::resolve("exotica", GetRootFrameName()), tf::resolve("exotica", "Frame" + std::to_string(i) + "B" + frame.frame_B.lock()->segment.getName()));
+                debug_frames_[i * 2] = tf::StampedTransform(T, ros::Time::now(), tf::resolve(tf_prefix, GetRootFrameName()), tf::resolve(tf_prefix, "Frame" + std::to_string(i) + "B" + frame.frame_B.lock()->segment.getName()));
                 tf::transformKDLToTF(frame.temp_AB, T);
-                debug_frames_[i * 2 + 1] = tf::StampedTransform(T, ros::Time::now(), tf::resolve("exotica", "Frame" + std::to_string(i) + "B" + frame.frame_B.lock()->segment.getName()), tf::resolve("exotica", "Frame" + std::to_string(i) + "A" + frame.frame_A.lock()->segment.getName()));
+                debug_frames_[i * 2 + 1] = tf::StampedTransform(T, ros::Time::now(), tf::resolve(tf_prefix, "Frame" + std::to_string(i) + "B" + frame.frame_B.lock()->segment.getName()), tf::resolve(tf_prefix, "Frame" + std::to_string(i) + "A" + frame.frame_A.lock()->segment.getName()));
                 ++i;
             }
             Server::SendTransform(debug_frames_);
@@ -737,7 +752,7 @@ void KinematicTree::PublishFrames()
                     mrk.id = i;
                     mrk.ns = "CollisionObjects";
                     mrk.color = GetColor(tree_[i].lock()->color);
-                    mrk.header.frame_id = "exotica/" + tree_[i].lock()->segment.getName();
+                    mrk.header.frame_id = tf_prefix + "/" + tree_[i].lock()->segment.getName();
                     mrk.pose.orientation.w = 1.0;
                     mrk.type = visualization_msgs::Marker::MESH_RESOURCE;
                     mrk.mesh_resource = tree_[i].lock()->shape_resource_path;
@@ -749,16 +764,29 @@ void KinematicTree::PublishFrames()
                 }
                 else if (tree_[i].lock()->shape && (!tree_[i].lock()->closest_robot_link.lock() || !tree_[i].lock()->closest_robot_link.lock()->is_robot_link))
                 {
-                    visualization_msgs::Marker mrk;
-                    shapes::constructMarkerFromShape(tree_[i].lock()->shape.get(), mrk);
-                    mrk.action = visualization_msgs::Marker::ADD;
-                    mrk.frame_locked = true;
-                    mrk.id = i;
-                    mrk.ns = "CollisionObjects";
-                    mrk.color = GetColor(tree_[i].lock()->color);
-                    mrk.header.frame_id = "exotica/" + tree_[i].lock()->segment.getName();
-                    mrk.pose.orientation.w = 1.0;
-                    marker_array_msg_.markers.push_back(mrk);
+                    if (tree_[i].lock()->shape->type != shapes::ShapeType::OCTREE)
+                    {
+                        visualization_msgs::Marker mrk;
+                        shapes::constructMarkerFromShape(tree_[i].lock()->shape.get(), mrk);
+                        mrk.action = visualization_msgs::Marker::ADD;
+                        mrk.frame_locked = true;
+                        mrk.id = i;
+                        mrk.ns = "CollisionObjects";
+                        mrk.color = GetColor(tree_[i].lock()->color);
+                        mrk.header.frame_id = tf_prefix + "/" + tree_[i].lock()->segment.getName();
+                        mrk.pose.orientation.w = 1.0;
+                        marker_array_msg_.markers.push_back(mrk);
+                    }
+                    else
+                    {
+                        // OcTree needs separate handling as it's not supported in constructMarkerFromShape
+                        // NB: This only supports a single OctoMap in the KinematicTree as we only have one publisher!
+                        octomap::OcTree my_octomap = *std::static_pointer_cast<const shapes::OcTree>(tree_[i].lock()->shape)->octree.get();
+                        octomap_msgs::Octomap octomap_msg;
+                        octomap_msgs::binaryMapToMsg(my_octomap, octomap_msg);
+                        octomap_msg.header.frame_id = tf_prefix + "/" + tree_[i].lock()->segment.getName();
+                        octomap_pub_.publish(octomap_msg);
+                    }
                 }
             }
             shapes_pub_.publish(marker_array_msg_);
@@ -830,52 +858,36 @@ Eigen::MatrixXd KinematicTree::Jacobian(const std::string& element_A, const KDL:
     return Jacobian(A->second.lock(), offset_a, B->second.lock(), offset_b);
 }
 
-Eigen::MatrixXd KinematicTree::Jdot(const KDL::Jacobian& jacobian)
+exotica::Hessian KinematicTree::Hessian(std::shared_ptr<KinematicElement> element_A, const KDL::Frame& offset_a, std::shared_ptr<KinematicElement> element_B, const KDL::Frame& offset_b) const
 {
-    KDL::Jacobian Jdot;
-    ComputeJdot(jacobian, Jdot);
-    return Jdot.data;
+    if (!element_A) ThrowPretty("The pointer to KinematicElement A is dead.");
+    KinematicFrame frame;
+    frame.frame_A = element_A;
+    frame.frame_B = (element_B == nullptr) ? root_ : element_B;
+    frame.frame_A_offset = offset_a;
+    frame.frame_B_offset = offset_b;
+    KDL::Jacobian J(num_controlled_joints_);
+    ComputeJ(frame, J);
+    exotica::Hessian hessian = exotica::Hessian::Constant(6, Eigen::MatrixXd::Zero(num_controlled_joints_, num_controlled_joints_));
+    ComputeH(frame, J, hessian);
+    return hessian;
 }
 
-void KinematicTree::ComputeJdot(const KDL::Jacobian& jacobian, KDL::Jacobian& jacobian_dot) const
+exotica::Hessian KinematicTree::Hessian(const std::string& element_A, const KDL::Frame& offset_a, const std::string& element_B, const KDL::Frame& offset_b) const
 {
-    jacobian_dot.data.setZero(jacobian.rows(), jacobian.columns());
-    for (int i = 0; i < jacobian.columns(); ++i)
-    {
-        KDL::Twist tmp;
-        for (int j = 0; j < jacobian.columns(); ++j)
-        {
-            KDL::Twist jac_i_ = jacobian.getColumn(i);
-            KDL::Twist jac_j_ = jacobian.getColumn(j);
-            KDL::Twist t_djdq_;
-
-            if (j < i)
-            {
-                t_djdq_.vel = jac_j_.rot * jac_i_.vel;
-                t_djdq_.rot = jac_j_.rot * jac_i_.rot;
-            }
-            else if (j > i)
-            {
-                KDL::SetToZero(t_djdq_.rot);
-                t_djdq_.vel = -jac_j_.vel * jac_i_.rot;
-            }
-            else if (j == i)
-            {
-                // ref (40)
-                KDL::SetToZero(t_djdq_.rot);
-                t_djdq_.vel = jac_i_.rot * jac_i_.vel;
-            }
-
-            tmp += t_djdq_;
-        }
-        jacobian_dot.setColumn(i, tmp);
-    }
+    std::string name_a = element_A == "" ? root_->segment.getName() : element_A;
+    std::string name_b = element_B == "" ? root_->segment.getName() : element_B;
+    auto A = tree_map_.find(name_a);
+    if (A == tree_map_.end()) ThrowPretty("Can't find link '" << name_a << "'!");
+    auto B = tree_map_.find(name_b);
+    if (B == tree_map_.end()) ThrowPretty("Can't find link '" << name_b << "'!");
+    return this->Hessian(A->second.lock(), offset_a, B->second.lock(), offset_b);
 }
 
 void KinematicTree::ComputeJ(KinematicFrame& frame, KDL::Jacobian& jacobian) const
 {
     jacobian.data.setZero();
-    KDL::Frame tmp = FK(frame);  // Create temporary offset frames
+    (void)FK(frame);  // Create temporary offset frames
     std::shared_ptr<KinematicElement> it = frame.frame_A.lock();
     while (it != nullptr)
     {
@@ -900,6 +912,39 @@ void KinematicTree::ComputeJ(KinematicFrame& frame, KDL::Jacobian& jacobian) con
     }
 }
 
+void KinematicTree::ComputeH(KinematicFrame& frame, const KDL::Jacobian& jacobian, exotica::Hessian& hessian) const
+{
+    hessian.conservativeResize(6);
+    for (int i = 0; i < 6; ++i)
+    {
+        hessian(i).resize(jacobian.columns(), jacobian.columns());
+        hessian(i).setZero();
+    }
+
+    KDL::Twist axis;
+
+    for (int i = 0; i < jacobian.columns(); ++i)
+    {
+        axis.rot = jacobian.getColumn(i).rot;
+        for (int j = i; j < jacobian.columns(); ++j)
+        {
+            KDL::Twist Hij = axis * jacobian.getColumn(j);
+            hessian(0)(i, j) = Hij[0];
+            hessian(1)(i, j) = Hij[1];
+            hessian(2)(i, j) = Hij[2];
+            hessian(0)(j, i) = Hij[0];
+            hessian(1)(j, i) = Hij[1];
+            hessian(2)(j, i) = Hij[2];
+            if (i != j)
+            {
+                hessian(3)(j, i) = Hij[3];
+                hessian(4)(j, i) = Hij[4];
+                hessian(5)(j, i) = Hij[5];
+            }
+        }
+    }
+}
+
 void KinematicTree::UpdateJ()
 {
     int i = 0;
@@ -910,12 +955,12 @@ void KinematicTree::UpdateJ()
     }
 }
 
-void KinematicTree::UpdateJdot()
+void KinematicTree::UpdateH()
 {
     int i = 0;
     for (KinematicFrame& frame : solution_->frame)
     {
-        ComputeJdot(solution_->jacobian(i), solution_->jacobian_dot(i));
+        ComputeH(frame, solution_->jacobian(i), solution_->hessian(i));
         ++i;
     }
 }
@@ -961,7 +1006,7 @@ void KinematicTree::SetJointLimitsLower(Eigen::VectorXdRefConst lower_in)
     {
         for (unsigned int i = 0; i < num_controlled_joints_; ++i)
         {
-            controlled_joints_[i].lock()->joint_limits[0] = lower_in(i);
+            controlled_joints_[i].lock()->joint_limits[LIMIT_POSITION_LOWER] = lower_in(i);
         }
     }
     else
@@ -978,12 +1023,48 @@ void KinematicTree::SetJointLimitsUpper(Eigen::VectorXdRefConst upper_in)
     {
         for (unsigned int i = 0; i < num_controlled_joints_; ++i)
         {
-            controlled_joints_[i].lock()->joint_limits[1] = upper_in(i);
+            controlled_joints_[i].lock()->joint_limits[LIMIT_POSITION_UPPER] = upper_in(i);
         }
     }
     else
     {
         ThrowPretty("Got " << upper_in.rows() << " but " << num_controlled_joints_ << " expected.");
+    }
+
+    UpdateJointLimits();
+}
+
+void KinematicTree::SetJointVelocityLimits(Eigen::VectorXdRefConst velocity_in)
+{
+    if (velocity_in.rows() == num_controlled_joints_)
+    {
+        for (unsigned int i = 0; i < num_controlled_joints_; ++i)
+        {
+            controlled_joints_[i].lock()->velocity_limit = velocity_in(i);
+        }
+    }
+    else
+    {
+        ThrowPretty("Got " << velocity_in.rows() << " but " << num_controlled_joints_ << " expected.");
+    }
+
+    UpdateJointLimits();
+}
+
+void KinematicTree::SetJointAccelerationLimits(Eigen::VectorXdRefConst acceleration_in)
+{
+    if (acceleration_in.rows() == num_controlled_joints_)
+    {
+        for (unsigned int i = 0; i < num_controlled_joints_; ++i)
+        {
+            controlled_joints_[i].lock()->acceleration_limit = acceleration_in(i);
+        }
+
+        has_acceleration_limit_ = true;
+    }
+    else
+    {
+        ThrowPretty("Got " << acceleration_in.rows() << " but " << num_controlled_joints_ << " expected.");
     }
 
     UpdateJointLimits();
@@ -1008,6 +1089,35 @@ void KinematicTree::SetFloatingBaseLimitsPosXYZEulerZYX(
     UpdateJointLimits();
 }
 
+void KinematicTree::SetFloatingBaseLimitsPosXYZEulerZYX(
+    const std::vector<double>& lower, const std::vector<double>& upper, const std::vector<double>& velocity, const std::vector<double>& acceleration)
+{
+    if (controlled_base_type_ != BaseType::FLOATING)
+    {
+        ThrowPretty("This is not a floating joint!");
+    }
+    if (lower.size() != 6 || upper.size() != 6)
+    {
+        ThrowPretty("Wrong joint limit data size!");
+    }
+    if (velocity.size() != 6 && velocity.size() != 0)
+    {
+        ThrowPretty("Wrong velocity limit size!");
+    }
+    if (acceleration.size() != 6 && acceleration.size() != 0)
+    {
+        ThrowPretty("Wrong acceleration limit size!");
+    }
+    for (int i = 0; i < 6; ++i)
+    {
+        controlled_joints_[i].lock()->joint_limits = {lower[i], upper[i]};
+        controlled_joints_[i].lock()->velocity_limit = {velocity.size() != 0 ? velocity[i] : inf};
+        controlled_joints_[i].lock()->acceleration_limit = {acceleration.size() != 0 ? acceleration[i] : inf};
+    }
+
+    UpdateJointLimits();
+}
+
 void KinematicTree::SetPlanarBaseLimitsPosXYEulerZ(
     const std::vector<double>& lower, const std::vector<double>& upper)
 {
@@ -1027,6 +1137,35 @@ void KinematicTree::SetPlanarBaseLimitsPosXYEulerZ(
     UpdateJointLimits();
 }
 
+void KinematicTree::SetPlanarBaseLimitsPosXYEulerZ(
+    const std::vector<double>& lower, const std::vector<double>& upper, const std::vector<double>& velocity, const std::vector<double>& acceleration)
+{
+    if (controlled_base_type_ != BaseType::PLANAR)
+    {
+        ThrowPretty("This is not a planar joint!");
+    }
+    if (lower.size() != 3 || upper.size() != 3)
+    {
+        ThrowPretty("Wrong joint limit data size!");
+    }
+    if (velocity.size() != 3 && velocity.size() != 0)
+    {
+        ThrowPretty("Wrong velocity limit size!");
+    }
+    if (acceleration.size() != 3 && acceleration.size() != 0)
+    {
+        ThrowPretty("Wrong acceleration limit size!");
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        controlled_joints_[i].lock()->joint_limits = {lower[i], upper[i]};
+        controlled_joints_[i].lock()->velocity_limit = {velocity.size() != 0 ? velocity[i] : inf};
+        controlled_joints_[i].lock()->acceleration_limit = {acceleration.size() != 0 ? acceleration[i] : inf};
+    }
+
+    UpdateJointLimits();
+}
+
 void KinematicTree::ResetJointLimits()
 {
     std::vector<std::string> vars = model_->getVariableNames();
@@ -1036,14 +1175,40 @@ void KinematicTree::ResetJointLimits()
         {
             auto& ControlledJoint = controlled_joints_map_.at(vars[i]);
             int index = ControlledJoint.lock()->control_id;
-            controlled_joints_[index].lock()->joint_limits = {model_->getVariableBounds(vars[i]).min_position_, model_->getVariableBounds(vars[i]).max_position_};
+
+            // moveit_core::RobotModel does not have effort limits
+            // TODO: use urdf::Model instead
+
+            // Check for bounds, else set limits to inf
+            if (model_->getVariableBounds(vars[i]).position_bounded_)
+            {
+                controlled_joints_[index].lock()->joint_limits = {model_->getVariableBounds(vars[i]).min_position_, model_->getVariableBounds(vars[i]).max_position_};
+            }
+            else
+            {
+                controlled_joints_[index].lock()->joint_limits = {-inf, inf};
+            }
+            if (model_->getVariableBounds(vars[i]).velocity_bounded_)
+            {
+                controlled_joints_[index].lock()->velocity_limit = {model_->getVariableBounds(vars[i]).max_velocity_};
+            }
+            else
+            {
+                controlled_joints_[index].lock()->velocity_limit = {inf};
+            }
+            if (model_->getVariableBounds(vars[i]).acceleration_bounded_)
+            {
+                controlled_joints_[index].lock()->acceleration_limit = {model_->getVariableBounds(vars[i]).max_acceleration_};
+            }
+            else
+            {
+                controlled_joints_[index].lock()->acceleration_limit = {inf};
+            }
         }
     }
 
     ///	Manually defined floating base limits
     ///	Should be done more systematically with robot model class
-    constexpr double inf = std::numeric_limits<double>::infinity();
-    constexpr double pi = std::atan(1) * 4;
     if (controlled_base_type_ == BaseType::FLOATING)
     {
         controlled_joints_[0].lock()->joint_limits = {-inf, inf};
@@ -1068,15 +1233,18 @@ void KinematicTree::UpdateJointLimits()
     joint_limits_.setZero();
     for (int i = 0; i < num_controlled_joints_; ++i)
     {
-        joint_limits_(i, 0) = controlled_joints_[i].lock()->joint_limits[0];
-        joint_limits_(i, 1) = controlled_joints_[i].lock()->joint_limits[1];
+        joint_limits_(i, LIMIT_POSITION_LOWER) = controlled_joints_[i].lock()->joint_limits[LIMIT_POSITION_LOWER];
+        joint_limits_(i, LIMIT_POSITION_UPPER) = controlled_joints_[i].lock()->joint_limits[LIMIT_POSITION_UPPER];
+        velocity_limits_(i) = controlled_joints_[i].lock()->velocity_limit;
+        acceleration_limits_(i) = controlled_joints_[i].lock()->acceleration_limit;
     }
 
     // Update random state distributions for generating random controlled states
     random_state_distributions_.clear();
     for (int i = 0; i < num_controlled_joints_; ++i)
     {
-        random_state_distributions_.push_back(std::uniform_real_distribution<double>(joint_limits_(i, 0), joint_limits_(i, 1)));
+        random_state_distributions_.push_back(std::uniform_real_distribution<double>(joint_limits_(i, LIMIT_POSITION_LOWER), joint_limits_(i, LIMIT_POSITION_UPPER)));
+        // TODO: Implement random velocities and accelerations
     }
 }
 
@@ -1168,6 +1336,13 @@ std::vector<std::string> KinematicTree::GetKinematicChainLinks(const std::string
 
 void KinematicTree::SetModelState(Eigen::VectorXdRefConst x)
 {
+    // Work-around in case someone passed a vector of size num_controlled_joints_
+    if (x.rows() == num_controlled_joints_)
+    {
+        Update(x);
+        return;
+    }
+
     if (x.rows() != model_joints_names_.size()) ThrowPretty("Model state vector has wrong size, expected " << model_joints_names_.size() << " got " << x.rows());
     for (int i = 0; i < model_joints_names_.size(); ++i)
     {
@@ -1179,7 +1354,7 @@ void KinematicTree::SetModelState(Eigen::VectorXdRefConst x)
     if (debug) PublishFrames();
 }
 
-void KinematicTree::SetModelState(std::map<std::string, double> x)
+void KinematicTree::SetModelState(const std::map<std::string, double>& x)
 {
     for (auto& joint : x)
     {
@@ -1189,7 +1364,7 @@ void KinematicTree::SetModelState(std::map<std::string, double> x)
         }
         catch (const std::out_of_range& e)
         {
-            ThrowPretty("Robot model does not contain joint '" << joint.first << "'");
+            WARNING("Robot model does not contain joint '" << joint.first << "' - ignoring.");
         }
     }
     UpdateTree();
@@ -1237,5 +1412,13 @@ bool KinematicTree::DoesLinkWithNameExist(std::string name) const
 {
     // Check whether it exists in TreeMap, which should encompass both EnvironmentTree and model_tree_
     return tree_map_.find(name) != tree_map_.end();
+}
+
+std::shared_ptr<KinematicElement> KinematicTree::FindKinematicElementByName(const std::string& frame_name)
+{
+    auto it = tree_map_.find(frame_name);
+    if (it == tree_map_.end()) ThrowPretty("KinematicElement does not exist:" << frame_name);
+
+    return it->second.lock();
 }
 }  // namespace exotica
