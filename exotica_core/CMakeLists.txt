@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.0.2)
 project(exotica_core)
 
 ## catkin dependencies
@@ -26,7 +26,7 @@ set(SYSTEM_DEPENDS
 
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS cmake_modules ${CATKIN_DEPENDS})
-find_package(Boost REQUIRED COMPONENTS signals)
+find_package(Boost REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -36,10 +36,10 @@ pkg_check_modules(MSGPACK QUIET msgpack)
 pkg_check_modules(TinyXML2 REQUIRED tinyxml2)
 
 if(MSGPACK_FOUND)
-    add_definitions(-DMSGPACK_FOUND)
-    list(APPEND SYSTEM_DEPENDS MSGPACK)
+  add_definitions(-DMSGPACK_FOUND)
+  list(APPEND SYSTEM_DEPENDS MSGPACK)
 else()
-    message(STATUS "MessagePack not found. VisualizationMeshcat will be disabled.")
+  message(STATUS "MessagePack not found. VisualizationMeshcat will be disabled.")
 endif()
 
 # NB: VERSION_GREATER_EQUAL requires CMake 3.7
@@ -75,6 +75,14 @@ AddInitializer(
   bounded_end_pose_problem
   dynamic_time_indexed_shooting_problem
   dynamics_solver
+  collision_scene
+
+  shape
+  box_shape
+  cylinder_shape
+  mesh_shape
+  octree_shape
+  sphere_shape
 )
 GenInitializers()
 
@@ -108,6 +116,7 @@ add_library(${PROJECT_NAME}
   src/visualization_moveit.cpp
   src/visualization_meshcat.cpp
   src/scene.cpp
+  src/collision_scene.cpp
   src/trajectory.cpp
   src/property.cpp
   src/kinematic_tree.cpp
@@ -141,16 +150,22 @@ add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_initializers ${catkin_EXPORTED_
 target_compile_options(${PROJECT_NAME} PRIVATE -Werror -Wall -Wextra)
 # enable additional warnings
 target_compile_options(${PROJECT_NAME} PRIVATE -Wdeprecated-declarations -Woverloaded-virtual -Wfloat-conversion)
+# These work too: -Wstrict-overflow=5 -Wswitch-default -Wundef)
+
+## Quick fixes to get Noetic to compile:
+# - ZMQ is using deprecated send() declarations - remove once fixed for Noetic
+# - -Wno-deprecated-copy needs to be appended here to avoid issues with pragmas for Melodic
+target_compile_options(${PROJECT_NAME} PRIVATE -Wno-deprecated-declarations -Wno-deprecated-copy)
 
 # TODO: if you have time, remove these ignored warnings and fix them
-target_compile_options(${PROJECT_NAME} PRIVATE -Wno-unused-parameter -Wno-sign-compare -Wno-unused-variable -Wno-reorder -Wno-unused-but-set-variable)
+target_compile_options(${PROJECT_NAME} PRIVATE -Wno-unused-parameter -Wno-sign-compare -Wno-reorder)
 
 # Ignore Eigen::Tensor warnings
 target_compile_options(${PROJECT_NAME} PRIVATE -Wno-ignored-attributes)
 
 # TODO: if you have even more time, uncomment these warnings and fix them :-)
 # https://stackoverflow.com/a/9862800
-#target_compile_options(${PROJECT_NAME} PRIVATE -pedantic -Wcast-align -Wcast-qual -Wctor-dtor-privacy -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wmissing-declarations -Wmissing-include-dirs -Wold-style-cast -Woverloaded-virtual -Wredundant-decls -Wshadow -Wsign-conversion -Wsign-promo -Wstrict-null-sentinel -Wstrict-overflow=5 -Wswitch-default -Wundef)
+# target_compile_options(${PROJECT_NAME} PRIVATE -pedantic -Wcast-align -Wcast-qual -Wctor-dtor-privacy -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wmissing-declarations -Wmissing-include-dirs -Wold-style-cast -Woverloaded-virtual -Wredundant-decls -Wshadow -Wsign-conversion -Wsign-promo -Wstrict-null-sentinel)
 
 ## Install
 install(TARGETS ${PROJECT_NAME}
@@ -166,5 +181,7 @@ if(CATKIN_ENABLE_TESTING)
   target_link_libraries(test_autodiff ${catkin_LIBRARIES} ${PROJECT_NAME})
   add_dependencies(test_autodiff ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 
-  catkin_add_nosetests(test/test_box_qp.py)
+  catkin_add_gtest(test_kinematics test/test_kinematics.cpp)
+  target_link_libraries(test_kinematics ${catkin_LIBRARIES} ${PROJECT_NAME})
+  add_dependencies(test_kinematics ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 endif()

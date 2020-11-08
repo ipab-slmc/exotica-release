@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.0.2)
 project(exotica_python)
 
 find_package(PkgConfig REQUIRED)
@@ -28,6 +28,7 @@ catkin_package(
 
 pybind11_add_module(_pyexotica MODULE src/pyexotica.cpp)
 target_link_libraries(_pyexotica PRIVATE ${PYTHON_LIBRARIES} ${catkin_LIBRARIES})
+target_compile_options(_pyexotica PRIVATE "-Wno-deprecated-declarations")  # because we are refactoring and triggereing this ourselves.
 target_include_directories(_pyexotica PUBLIC ${catkin_INCLUDE_DIRS} ${pybind11_catkin_INCLUDE_DIRS}/pybind11_catkin) # the latter is a work-around until 2.4.3 is released
 add_dependencies(_pyexotica ${catkin_EXPORTED_TARGETS})
 set_target_properties(_pyexotica PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CATKIN_GLOBAL_PYTHON_DESTINATION}/pyexotica)
@@ -42,3 +43,9 @@ COMMENT "Copying library files to python directory")
 catkin_python_setup()
 
 install(TARGETS _pyexotica LIBRARY DESTINATION ${CATKIN_GLOBAL_PYTHON_DESTINATION}/pyexotica)
+
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(test/test_no_unknown_initializer_types.py)
+  # catkin_add_nosetests(test/test_box_qp.py)  # 2020-11-06: Deactivated as SciPy is not always predictable.
+  catkin_add_nosetests(test/test_sparse_costs.py)
+endif()
