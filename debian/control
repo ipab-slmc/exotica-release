@@ -1,0 +1,12 @@
+Source: ros-kinetic-exotica-core-task-maps
+Section: misc
+Priority: optional
+Maintainer: Vladimir Ivan <v.ivan@ed.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-kinetic-catkin, ros-kinetic-eigen-conversions, ros-kinetic-exotica-collision-scene-fcl-latest, ros-kinetic-exotica-core, ros-kinetic-exotica-python, ros-kinetic-geometry-msgs, ros-kinetic-rosunit
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-kinetic-exotica-core-task-maps
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-kinetic-exotica-core, ros-kinetic-exotica-python, ros-kinetic-geometry-msgs
+Description: Common taskmaps provided with EXOTica.
