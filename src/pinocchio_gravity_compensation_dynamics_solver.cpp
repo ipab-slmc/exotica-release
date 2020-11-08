@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019, Wolfgang Merkt
+// Copyright (c) 2020, University of Oxford
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,36 +27,31 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include <exotica_pinocchio_dynamics_solver/pinocchio_dynamics_solver.h>
+#include <exotica_pinocchio_dynamics_solver/pinocchio_gravity_compensation_dynamics_solver.h>
 
 #include <pinocchio/algorithm/aba-derivatives.hpp>
 #include <pinocchio/algorithm/aba.hpp>
+#include <pinocchio/algorithm/cholesky.hpp>
+#include <pinocchio/algorithm/compute-all-terms.hpp>
 #include <pinocchio/algorithm/joint-configuration.hpp>
+#include <pinocchio/algorithm/rnea-derivatives.hpp>
 #include <pinocchio/algorithm/rnea.hpp>
 #include <pinocchio/parsers/urdf.hpp>
 
-REGISTER_DYNAMICS_SOLVER_TYPE("PinocchioDynamicsSolver", exotica::PinocchioDynamicsSolver)
+REGISTER_DYNAMICS_SOLVER_TYPE("PinocchioDynamicsSolverWithGravityCompensation", exotica::PinocchioDynamicsSolverWithGravityCompensation)
 
 namespace exotica
 {
-void PinocchioDynamicsSolver::AssignScene(ScenePtr scene_in)
+void PinocchioDynamicsSolverWithGravityCompensation::AssignScene(ScenePtr scene_in)
 {
     constexpr bool verbose = false;
     if (scene_in->GetKinematicTree().GetControlledBaseType() == BaseType::FIXED)
     {
         pinocchio::urdf::buildModel(scene_in->GetKinematicTree().GetRobotModel()->getURDF(), model_, verbose);
     }
-    /*else if (scene_in->GetKinematicTree().GetControlledBaseType() == BaseType::PLANAR)
-    {
-        pinocchio::urdf::buildModel(scene_in->GetKinematicTree().GetRobotModel()->getURDF(), pinocchio::JointModelPlanar(), model_, verbose);
-    }
-    else if (scene_in->GetKinematicTree().GetControlledBaseType() == BaseType::FLOATING)
-    {
-        pinocchio::urdf::buildModel(scene_in->GetKinematicTree().GetRobotModel()->getURDF(), pinocchio::JointModelFreeFlyer(), model_, verbose);
-    }*/
     else
     {
-        ThrowPretty("This condition should never happen. Unknown BaseType.");
+        ThrowPretty("Only BaseType::FIXED is currently supported with this DynamicsSolver.");
     }
 
     num_positions_ = model_.nq;
@@ -73,20 +68,58 @@ void PinocchioDynamicsSolver::AssignScene(ScenePtr scene_in)
     fu_.setZero(ndx, num_controls_);
     Fx_.setZero(ndx, ndx);
     Fu_.setZero(ndx, num_controls_);
+    u_nle_.setZero(num_controls_);
+    u_command_.setZero(num_controls_);
+    a_.setZero(num_velocities_);
+    du_command_dq_.setZero(num_controls_, num_velocities_);
+    du_nle_dq_.setZero(num_controls_, num_velocities_);
 }
 
-Eigen::VectorXd PinocchioDynamicsSolver::f(const StateVector& x, const ControlVector& u)
+Eigen::VectorXd PinocchioDynamicsSolverWithGravityCompensation::f(const StateVector& x, const ControlVector& u)
 {
-    // TODO: THIS DOES NOT WORK FOR A FLOATING BASE YET!!
-    pinocchio::aba(model_, *pinocchio_data_.get(), x.head(num_positions_), x.tail(num_velocities_), u);
+    // Obtain torque to compensate gravity and dynamic effects (Coriolis)
+    u_nle_ = pinocchio::nonLinearEffects(model_, *pinocchio_data_.get(), x.head(num_positions_), x.tail(num_velocities_));
+
+    // Commanded torque is u_nle_ + u
+    u_command_.noalias() = u_nle_ + u;
+
+    pinocchio::aba(model_, *pinocchio_data_.get(), x.head(num_positions_), x.tail(num_velocities_), u_command_);
     xdot_analytic_.head(num_velocities_) = x.tail(num_velocities_);
     xdot_analytic_.tail(num_velocities_) = pinocchio_data_->ddq;
     return xdot_analytic_;
 }
 
-void PinocchioDynamicsSolver::ComputeDerivatives(const StateVector& x, const ControlVector& u)
+void PinocchioDynamicsSolverWithGravityCompensation::ComputeDerivatives(const StateVector& x, const ControlVector& u)
 {
-    pinocchio::computeABADerivatives(model_, *pinocchio_data_.get(), x.head(num_positions_), x.tail(num_velocities_), u, fx_.block(num_velocities_, 0, num_velocities_, num_velocities_), fx_.block(num_velocities_, num_velocities_, num_velocities_, num_velocities_), fu_.bottomRightCorner(num_velocities_, num_velocities_));
+    Eigen::VectorBlock<const Eigen::VectorXd> q = x.head(num_positions_);
+    Eigen::VectorBlock<const Eigen::VectorXd> v = x.tail(num_velocities_);
+
+    // Obtain torque to compensate gravity and dynamic effects (Coriolis)
+    u_nle_ = pinocchio::nonLinearEffects(model_, *pinocchio_data_.get(), q, v);
+
+    // Commanded torque is u_nle_ + u
+    u_command_.noalias() = u_nle_ + u;
+
+    pinocchio_data_->Minv.setZero();
+    pinocchio::computeAllTerms(model_, *pinocchio_data_.get(), q, v);
+    pinocchio::cholesky::decompose(model_, *pinocchio_data_.get());
+    pinocchio::cholesky::computeMinv(model_, *pinocchio_data_.get(), pinocchio_data_->Minv);
+
+    // du_command_dq_
+    a_.noalias() = pinocchio_data_->Minv * u_command_;
+    pinocchio::computeRNEADerivatives(model_, *pinocchio_data_.get(), q, v, a_);
+    du_command_dq_.noalias() = pinocchio_data_->Minv * pinocchio_data_->dtau_dq;
+
+    // du_nle_dq_
+    a_.noalias() = pinocchio_data_->Minv * u_nle_;
+    pinocchio::computeRNEADerivatives(model_, *pinocchio_data_.get(), q, v, a_);
+    du_nle_dq_.noalias() = pinocchio_data_->Minv * pinocchio_data_->dtau_dq;
+
+    // du_dq_
+    fx_.block(num_velocities_, 0, num_velocities_, num_velocities_).noalias() = du_nle_dq_ - du_command_dq_;
+
+    // Since dtau_du=Identity, the partial derivative of fu is directly Minv.
+    fu_.bottomRightCorner(num_velocities_, num_velocities_) = pinocchio_data_->Minv;
 
     Eigen::Block<Eigen::MatrixXd> da_dx = fx_.block(num_velocities_, 0, num_velocities_, get_num_state_derivative());
     Eigen::Block<Eigen::MatrixXd> da_du = fu_.block(num_velocities_, 0, num_velocities_, num_controls_);
@@ -111,7 +144,8 @@ void PinocchioDynamicsSolver::ComputeDerivatives(const StateVector& x, const Con
         // Semi-implicit Euler
         case Integrator::SymplecticEuler:
         {
-            Eigen::VectorXd dx_v = dt_ * x.tail(num_velocities_) + dt_ * dt_ * pinocchio_data_->ddq;
+            a_.noalias() = pinocchio_data_->Minv * u_command_;
+            Eigen::VectorXd dx_v = dt_ * x.tail(num_velocities_) + dt_ * dt_ * a_;
 
             Fx_.topRows(num_velocities_).noalias() = dt_ * dt_ * da_dx;
             Fx_.bottomRows(num_velocities_).noalias() = dt_ * da_dx;
@@ -130,33 +164,60 @@ void PinocchioDynamicsSolver::ComputeDerivatives(const StateVector& x, const Con
     };
 }
 
-Eigen::MatrixXd PinocchioDynamicsSolver::fx(const StateVector& x, const ControlVector& u)
+Eigen::MatrixXd PinocchioDynamicsSolverWithGravityCompensation::fx(const StateVector& x, const ControlVector& u)
 {
-    // Four quadrants should be: 0, Identity, ddq_dq, ddq_dv
-    // 0 and Identity are set during initialisation. Here, we pass references to ddq_dq, ddq_dv to the algorithm.
-    pinocchio::computeABADerivatives(model_, *pinocchio_data_.get(), x.head(num_positions_), x.tail(num_velocities_), u, fx_.block(num_velocities_, 0, num_velocities_, num_velocities_), fx_.block(num_velocities_, num_velocities_, num_velocities_, num_velocities_), fu_.bottomRightCorner(num_velocities_, num_velocities_));
+    Eigen::VectorBlock<const Eigen::VectorXd> q = x.head(num_positions_);
+    Eigen::VectorBlock<const Eigen::VectorXd> v = x.tail(num_velocities_);
+
+    // Obtain torque to compensate gravity and dynamic effects (Coriolis)
+    u_nle_ = pinocchio::nonLinearEffects(model_, *pinocchio_data_.get(), q, v);
+
+    // Commanded torque is u_nle_ + u
+    u_command_.noalias() = u_nle_ + u;
+
+    pinocchio_data_->Minv.setZero();
+    pinocchio::computeAllTerms(model_, *pinocchio_data_.get(), q, v);
+    pinocchio::cholesky::decompose(model_, *pinocchio_data_.get());
+    pinocchio::cholesky::computeMinv(model_, *pinocchio_data_.get(), pinocchio_data_->Minv);
+
+    // du_command_dq_
+    a_.noalias() = pinocchio_data_->Minv * u_command_;
+    pinocchio::computeRNEADerivatives(model_, *pinocchio_data_.get(), q, v, a_);
+    du_command_dq_.noalias() = pinocchio_data_->Minv * pinocchio_data_->dtau_dq;
+
+    // du_nle_dq_
+    a_.noalias() = pinocchio_data_->Minv * u_nle_;
+    pinocchio::computeRNEADerivatives(model_, *pinocchio_data_.get(), q, v, a_);
+    du_nle_dq_.noalias() = pinocchio_data_->Minv * pinocchio_data_->dtau_dq;
+
+    // du_dq_
+    fx_.block(num_velocities_, 0, num_velocities_, num_velocities_).noalias() = du_nle_dq_ - du_command_dq_;
 
     return fx_;
 }
 
-Eigen::MatrixXd PinocchioDynamicsSolver::fu(const StateVector& x, const ControlVector& u)
+Eigen::MatrixXd PinocchioDynamicsSolverWithGravityCompensation::fu(const StateVector& x, const ControlVector& u)
 {
-    // NB: ddq_dtau is computed with the same call - i.e., we are duplicating computation.
-    pinocchio::computeABADerivatives(model_, *pinocchio_data_.get(), x.head(num_positions_), x.tail(num_velocities_), u, fx_.block(num_velocities_, 0, num_velocities_, num_velocities_), fx_.block(num_velocities_, num_velocities_, num_velocities_, num_velocities_), fu_.bottomRightCorner(num_velocities_, num_velocities_));
+    Eigen::VectorBlock<const Eigen::VectorXd> q = x.head(num_positions_);
+    Eigen::VectorBlock<const Eigen::VectorXd> v = x.tail(num_velocities_);
+
+    // Obtain torque to compensate gravity and dynamic effects (Coriolis)
+    u_nle_ = pinocchio::nonLinearEffects(model_, *pinocchio_data_.get(), q, v);
+
+    // Commanded torque is u_nle_ + u
+    u_command_.noalias() = u_nle_ + u;
+
+    // Since dtau_du=Identity, the partial derivative of fu is directly Minv.
+    Eigen::Block<Eigen::MatrixXd> Minv = fu_.bottomRightCorner(num_velocities_, num_velocities_);
+
+    pinocchio::computeAllTerms(model_, *pinocchio_data_.get(), q, v);
+    pinocchio::cholesky::decompose(model_, *pinocchio_data_.get());
+    pinocchio::cholesky::computeMinv(model_, *pinocchio_data_.get(), Minv);
 
     return fu_;
 }
 
-Eigen::VectorXd PinocchioDynamicsSolver::InverseDynamics(const StateVector& x)
-{
-    // compute dynamic drift -- Coriolis, centrifugal, gravity
-    // Assume 0 acceleration
-    Eigen::VectorXd u = pinocchio::rnea(model_, *pinocchio_data_.get(), x.head(num_positions_), x.tail(num_velocities_), Eigen::VectorXd::Zero(num_velocities_));
-
-    return u;
-}
-
-Eigen::VectorXd PinocchioDynamicsSolver::StateDelta(const StateVector& x_1, const StateVector& x_2)
+Eigen::VectorXd PinocchioDynamicsSolverWithGravityCompensation::StateDelta(const StateVector& x_1, const StateVector& x_2)
 {
     if (x_1.size() != num_positions_ + num_velocities_ || x_2.size() != num_positions_ + num_velocities_)
     {
@@ -169,7 +230,7 @@ Eigen::VectorXd PinocchioDynamicsSolver::StateDelta(const StateVector& x_1, cons
     return dx;
 }
 
-Eigen::MatrixXd PinocchioDynamicsSolver::dStateDelta(const StateVector& x_1, const StateVector& x_2, const ArgumentPosition first_or_second)
+Eigen::MatrixXd PinocchioDynamicsSolverWithGravityCompensation::dStateDelta(const StateVector& x_1, const StateVector& x_2, const ArgumentPosition first_or_second)
 {
     if (x_1.size() != num_positions_ + num_velocities_ || x_2.size() != num_positions_ + num_velocities_)
     {
@@ -196,7 +257,7 @@ Eigen::MatrixXd PinocchioDynamicsSolver::dStateDelta(const StateVector& x_1, con
     return J;
 }
 
-void PinocchioDynamicsSolver::Integrate(const StateVector& x, const StateVector& dx, const double dt, StateVector& xout)
+void PinocchioDynamicsSolverWithGravityCompensation::Integrate(const StateVector& x, const StateVector& dx, const double dt, StateVector& xout)
 {
     // TODO: Create switch based on base type and normalize if the state contains a quaternion.
 
