@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.0.2)
 project(exotica_pendulum_dynamics_solver)
 
 find_package(catkin REQUIRED COMPONENTS
@@ -22,6 +22,7 @@ include_directories(
 
 add_library(${PROJECT_NAME} src/pendulum_dynamics_solver.cpp)
 add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_initializers ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 
 # Ignore Eigen::Tensor warnings
 target_compile_options(${PROJECT_NAME} PRIVATE -Wno-ignored-attributes)
