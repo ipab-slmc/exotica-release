@@ -18,8 +18,7 @@ def publish_pose(q, problem, t=0.0):
 
 def publish_trajectory(traj, T, problem, once=False):
     if len(traj) == 0:
-        print("Trajectory has zero elements")
-        raise
+        raise ValueError("Trajectory has zero elements")
     signal.signal(signal.SIGINT, sig_int_handler)
     print('Playing back trajectory ' + str(T) + 's')
     dt = float(T) / float(len(traj))
@@ -37,8 +36,7 @@ def publish_trajectory(traj, T, problem, once=False):
 
 def publish_time_indexed_trajectory(traj, Ts, problem, once=False):
     if len(traj) == 0:
-        print("Trajectory has zero elements")
-        raise
+        raise ValueError("Trajectory has zero elements")
     signal.signal(signal.SIGINT, sig_int_handler)
     print('Playing back trajectory ' + str(len(Ts)) +
           ' states in ' + str(Ts[len(Ts) - 1]))
@@ -55,9 +53,11 @@ def publish_time_indexed_trajectory(traj, Ts, problem, once=False):
     return True
 
 
-def plot(solution, labels=None):
+def plot(solution, labels=None, yscale=None):
     print('Plotting the solution')
     plt.plot(solution, '.-')
     if labels is not None:
         plt.legend(labels)
+    if yscale is not None:
+        plt.yscale(yscale)
     plt.show()
