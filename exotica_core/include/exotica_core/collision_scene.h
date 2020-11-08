@@ -51,7 +51,16 @@ class AllowedCollisionMatrix
 {
 public:
     AllowedCollisionMatrix() {}
-    AllowedCollisionMatrix(const AllowedCollisionMatrix& acm) { entries_ = acm.entries_; }
+    ~AllowedCollisionMatrix() {}
+    AllowedCollisionMatrix(const AllowedCollisionMatrix& acm) : entries_(acm.entries_) {}
+    AllowedCollisionMatrix& operator=(const AllowedCollisionMatrix& other)
+    {
+        if (this != &other)
+        {
+            entries_ = other.entries_;
+        }
+        return *this;
+    }
     inline void clear() { entries_.clear(); }
     inline bool hasEntry(const std::string& name) const { return entries_.find(name) == entries_.end(); }
     inline void setEntry(const std::string& name1, const std::string& name2) { entries_[name1].insert(name2); }
@@ -136,11 +145,14 @@ struct CollisionProxy
 };
 
 /// The class of collision scene
-class CollisionScene : public Uncopyable
+class CollisionScene : public Object, public Uncopyable, public virtual InstantiableBase
 {
 public:
     CollisionScene() {}
     virtual ~CollisionScene() {}
+    /// \brief Instantiates the base properties of the CollisionScene
+    virtual void InstantiateBase(const Initializer& init);
+
     /// @brief Setup additional construction that requires initialiser parameter
     virtual void Setup() {}
     /// @brief Returns whether two collision objects/shapes are allowed to collide by name.
@@ -148,7 +160,8 @@ public:
     /// @param o2 Name of the frame of the other collision object (e.g., base_link_collision_0)
     /// @return true The two objects are allowed to collide.
     /// @return false The two objects are excluded, e.g., by an ACM.
-    virtual bool IsAllowedToCollide(const std::string& o1, const std::string& o2, const bool& self) { ThrowPretty("Not implemented!"); }
+    virtual bool IsAllowedToCollide(const std::string& o1, const std::string& o2, const bool& self);
+
     /// \brief Checks if the whole robot is valid (collision only).
     /// @param self Indicate if self collision check is required.
     /// @return True, if the state is collision free..
@@ -231,6 +244,7 @@ public:
         if (scale < 0.0)
             ThrowPretty("Link scaling needs to be greater than or equal to 0");
         robot_link_scale_ = scale;
+        needs_update_of_collision_objects_ = true;
     }
 
     double GetWorldLinkScale() const { return world_link_scale_; }
@@ -239,6 +253,7 @@ public:
         if (scale < 0.0)
             ThrowPretty("Link scaling needs to be greater than or equal to 0");
         world_link_scale_ = scale;
+        needs_update_of_collision_objects_ = true;
     }
 
     double GetRobotLinkPadding() const { return robot_link_padding_; }
@@ -247,6 +262,7 @@ public:
         if (padding < 0.0)
             HIGHLIGHT_NAMED("SetRobotLinkPadding", "Generally, padding should be positive.");
         robot_link_padding_ = padding;
+        needs_update_of_collision_objects_ = true;
     }
 
     double GetWorldLinkPadding() const { return world_link_padding_; }
@@ -255,12 +271,14 @@ public:
         if (padding < 0.0)
             HIGHLIGHT_NAMED("SetRobotLinkPadding", "Generally, padding should be positive.");
         world_link_padding_ = padding;
+        needs_update_of_collision_objects_ = true;
     }
 
     bool GetReplacePrimitiveShapesWithMeshes() const { return replace_primitive_shapes_with_meshes_; }
     void SetReplacePrimitiveShapesWithMeshes(const bool value)
     {
         replace_primitive_shapes_with_meshes_ = value;
+        needs_update_of_collision_objects_ = true;
     }
 
     /// \brief Creates the collision scene from kinematic elements.
@@ -270,12 +288,14 @@ public:
     /// \brief Updates collision object transformations from the kinematic tree.
     virtual void UpdateCollisionObjectTransforms() = 0;
 
-    bool replace_cylinders_with_capsules = false;
+    bool get_replace_cylinders_with_capsules() const { return replace_cylinders_with_capsules_; }
+    void set_replace_cylinders_with_capsules(const bool value)
+    {
+        replace_cylinders_with_capsules_ = value;
+        needs_update_of_collision_objects_ = true;
+    }
 
     bool debug_ = false;
-
-    /// \brief Links to exclude from collision scene - gets set from Scene::UpdateSceneFrames
-    std::set<std::string> world_links_to_exclude_from_collision_scene;
 
     /// \brief Sets a scene pointer to the CollisionScene for access to methods
     void AssignScene(std::shared_ptr<Scene> scene)
@@ -284,6 +304,9 @@ public:
     }
 
 protected:
+    /// Indicates whether TriggerUpdateCollisionObjects needs to be called.
+    bool needs_update_of_collision_objects_ = true;
+
     /// Stores a pointer to the Scene which owns this CollisionScene
     std::weak_ptr<Scene> scene_;
 
@@ -307,6 +330,12 @@ protected:
 
     /// Replace primitive shapes with meshes internally (e.g. when primitive shape algorithms are brittle, i.e. in FCL)
     bool replace_primitive_shapes_with_meshes_ = false;
+
+    /// Replace cylinders with capsules internally
+    bool replace_cylinders_with_capsules_ = false;
+
+    /// Filename for config file (YAML) which contains shape replacements
+    std::string robot_link_replacement_config_ = "";
 };
 
 typedef std::shared_ptr<CollisionScene> CollisionScenePtr;
