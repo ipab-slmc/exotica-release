@@ -36,6 +36,7 @@ namespace testing
 {
 namespace internal
 {
+#if !ROS_VERSION_MINIMUM(1, 15, 0)
 enum GTestColor
 {
     COLOR_DEFAULT,
@@ -43,8 +44,8 @@ enum GTestColor
     COLOR_GREEN,
     COLOR_YELLOW
 };
-
-extern void ColoredPrintf(GTestColor color, const char* fmt, ...);
+#endif
+extern void ColoredPrintf(testing::internal::GTestColor color, const char* fmt, ...);
 }
 }
 #define PRINTF(...)                                                                        \
@@ -148,40 +149,41 @@ void testHessianEndPose(std::shared_ptr<T> problem, EndPoseTask& task, double ep
         Eigen::VectorXd x0(problem->N);
         x0.setRandom();
         problem->Update(x0);
-        Eigen::MatrixXd J0 = task.jacobian;
-        Hessian H0 = task.hessian;
-        Hessian H = H0;
-        Hessian H1 = H0;
-        for (int k = 0; k < task.length_jacobian; ++k)
+
+        Hessian H_task = task.hessian;
+
+        Hessian H_fd = Hessian::Constant(problem->length_jacobian, Eigen::MatrixXd::Zero(problem->N, problem->N));
+        Eigen::VectorXd x(problem->N);
+        for (int j = 0; j < problem->N; ++j)
         {
-            H1(k) = J0.row(k).transpose() * J0.row(k);
-        }
-        for (int i = 0; i < H.rows(); ++i) H(i).setZero();
-        for (int i = 0; i < problem->N; ++i)
-        {
-            Eigen::VectorXd x = x0;
-            x(i) += h;
+            x = x0;
+            x(j) += h;
             problem->Update(x);
-            Eigen::MatrixXd Ji = task.jacobian;
-            for (int k = 0; k < task.length_jacobian; ++k)
+            const Eigen::MatrixXd J1 = problem->jacobian;
+            x = x0;
+            x(j) -= h;
+            problem->Update(x);
+            const Eigen::MatrixXd J2 = problem->jacobian;
+            for (int i = 0; i < problem->N; ++i)
             {
-                H(k).row(i) = (Ji.row(k) - J0.row(k)) / h;
+                for (int k = 0; k < problem->length_jacobian; ++k)
+                {
+                    H_fd(k)(i, j) = (J1(k, i) - J2(k, i)) / (2.0 * h);
+                }
             }
         }
-        Hessian dH = H - H0;
-        Hessian dH1 = H1 - H0;
-        double errH = 0.0;
-        for (int i = 0; i < dH.rows(); ++i)
-            errH = std::min(std::max(errH, dH(i).array().cwiseAbs().maxCoeff()),
-                            std::max(errH, dH1(i).array().cwiseAbs().maxCoeff()));
+        double errH = 0;
+        for (int i = 0; i < H_fd.rows(); ++i) errH += (H_fd(i) - H_task(i)).norm();
+
+        Hessian dH = H_fd - H_task;
         if (errH > eps)
         {
             for (int i = 0; i < dH.rows(); ++i)
             {
                 TEST_COUT << "Computed:\n"
-                          << H0(i);
+                          << H_task(i);
                 TEST_COUT << "FD:\n"
-                          << H(i);
+                          << H_fd(i);
                 TEST_COUT << "Diff:\n"
                           << dH(i);
             }
@@ -233,40 +235,41 @@ void testHessianTimeIndexed(std::shared_ptr<T> problem, TimeIndexedTask& task, i
         Eigen::VectorXd x0(problem->N);
         x0.setRandom();
         problem->Update(x0, t);
-        Eigen::MatrixXd J0 = task.jacobian[t];
-        Hessian H0 = task.hessian[t];
-        Hessian H = H0;
-        Hessian H1 = H0;
-        for (int k = 0; k < task.length_jacobian; ++k)
+
+        Hessian H_task = task.hessian[t];
+
+        Hessian H_fd = Hessian::Constant(problem->length_jacobian, Eigen::MatrixXd::Zero(problem->N, problem->N));
+        Eigen::VectorXd x(problem->N);
+        for (int j = 0; j < problem->N; ++j)
         {
-            H1(k) = J0.row(k).transpose() * J0.row(k);
-        }
-        for (int i = 0; i < H.rows(); ++i) H(i).setZero();
-        for (int i = 0; i < problem->N; ++i)
-        {
-            Eigen::VectorXd x = x0;
-            x(i) += h;
+            x = x0;
+            x(j) += h;
             problem->Update(x, t);
-            Eigen::MatrixXd Ji = task.jacobian[t];
-            for (int k = 0; k < task.length_jacobian; ++k)
+            const Eigen::MatrixXd J1 = problem->jacobian[t];
+            x = x0;
+            x(j) -= h;
+            problem->Update(x, t);
+            const Eigen::MatrixXd J2 = problem->jacobian[t];
+            for (int i = 0; i < problem->N; ++i)
             {
-                H(k).row(i) = (Ji.row(k) - J0.row(k)) / h;
+                for (int k = 0; k < problem->length_jacobian; ++k)
+                {
+                    H_fd(k)(i, j) = (J1(k, i) - J2(k, i)) / (2.0 * h);
+                }
             }
         }
-        Hessian dH = H - H0;
-        Hessian dH1 = H1 - H0;
-        double errH = 0.0;
-        for (int i = 0; i < dH.rows(); ++i)
-            errH = std::min(std::max(errH, dH(i).array().cwiseAbs().maxCoeff()),
-                            std::max(errH, dH1(i).array().cwiseAbs().maxCoeff()));
+        double errH = 0;
+        for (int i = 0; i < H_fd.rows(); ++i) errH += (H_fd(i) - H_task(i)).norm();
+
+        Hessian dH = H_fd - H_task;
         if (errH > eps)
         {
             for (int i = 0; i < dH.rows(); ++i)
             {
                 TEST_COUT << "Computed:\n"
-                          << H0(i);
+                          << H_task(i);
                 TEST_COUT << "FD:\n"
-                          << H(i);
+                          << H_fd(i);
                 TEST_COUT << "Diff:\n"
                           << dH(i);
             }
@@ -306,9 +309,9 @@ TEST(ExoticaProblems, UnconstrainedEndPoseProblem)
         if (!(J[1] == J[2]))
             ADD_FAILURE() << "Cost Jacobians are inconsistent!";
     }
-    catch (...)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE() << "Uncaught exception!";
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
     }
 }
 
@@ -342,9 +345,9 @@ TEST(ExoticaProblems, BoundedEndPoseProblem)
         if (!(J[1] == J[2]))
             ADD_FAILURE() << "Cost Jacobians are inconsistent!";
     }
-    catch (...)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE() << "Uncaught exception!";
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
     }
 }
 
@@ -416,9 +419,9 @@ TEST(ExoticaProblems, EndPoseProblem)
         if (!(J[4] == J[5]))
             ADD_FAILURE() << "EndPoseProblem: Inequality Jacobians are inconsistent!";
     }
-    catch (...)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE() << "Uncaught exception!";
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
     }
 }
 
@@ -460,9 +463,9 @@ TEST(ExoticaProblems, UnconstrainedTimeIndexedProblem)
                 ADD_FAILURE() << "Cost Jacobians are inconsistent!";
         }
     }
-    catch (...)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE() << "Uncaught exception!";
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
     }
 }
 
@@ -504,9 +507,9 @@ TEST(ExoticaProblems, BoundedTimeIndexedProblem)
                 ADD_FAILURE() << "BoundedTimeIndexedProblem: cost Jacobians are inconsistent!";
         }
     }
-    catch (...)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE() << "Uncaught exception!";
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
     }
 }
 
@@ -586,9 +589,9 @@ TEST(ExoticaProblems, TimeIndexedProblem)
                 ADD_FAILURE() << "Inequality Jacobians are inconsistent!";
         }
     }
-    catch (...)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE() << "Uncaught exception!";
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
     }
 }
 
@@ -603,9 +606,9 @@ TEST(ExoticaProblems, SamplingProblem)
         TEST_COUT << "Testing valid state";
         if (!problem->IsValid(x)) ADD_FAILURE() << "Start state is invalid!";
     }
-    catch (...)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE() << "Uncaught exception!";
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
     }
 }
 
@@ -620,9 +623,9 @@ TEST(ExoticaProblems, TimeIndexedSamplingProblem)
         TEST_COUT << "Testing valid state";
         if (!problem->IsValid(x, 0.0)) ADD_FAILURE() << "Start state is invalid!";
     }
-    catch (...)
+    catch (const std::exception& e)
     {
-        ADD_FAILURE() << "Uncaught exception!";
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
     }
 }
 
