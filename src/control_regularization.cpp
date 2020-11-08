@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2020, University of Edinburgh, University of Oxford
+// Copyright (c) 2020, University of Oxford
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,47 +27,65 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include <exotica_core_task_maps/joint_pose.h>
+#include <exotica_core_task_maps/control_regularization.h>
 
-REGISTER_TASKMAP_TYPE("JointPose", exotica::JointPose);
+REGISTER_TASKMAP_TYPE("ControlRegularization", exotica::ControlRegularization);
 
 namespace exotica
 {
-void JointPose::Update(Eigen::VectorXdRefConst q, Eigen::VectorXdRef phi)
+// As this is a control-task-map, the configuration updates are all empty.
+void ControlRegularization::Update(Eigen::VectorXdRefConst /*q*/, Eigen::VectorXdRef /*phi*/)
+{
+}
+
+void ControlRegularization::Update(Eigen::VectorXdRefConst /*q*/, Eigen::VectorXdRef /*phi*/, Eigen::MatrixXdRef /*jacobian*/)
+{
+}
+
+void ControlRegularization::Update(Eigen::VectorXdRefConst /*q*/, Eigen::VectorXdRef /*phi*/, Eigen::MatrixXdRef /*jacobian*/, HessianRef /*hessian*/)
+{
+}
+
+// Dynamic update methods
+void ControlRegularization::Update(Eigen::VectorXdRefConst /*x*/, Eigen::VectorXdRefConst u, Eigen::VectorXdRef phi)
 {
     if (phi.rows() != static_cast<int>(joint_map_.size())) ThrowNamed("Wrong size of Phi!");
     for (std::size_t i = 0; i < joint_map_.size(); ++i)
     {
-        phi(i) = q(joint_map_[i]) - joint_ref_(i);
+        phi(i) = u(joint_map_[i]) - joint_ref_(i);
     }
 }
 
-void JointPose::Update(Eigen::VectorXdRefConst q, Eigen::VectorXdRef phi, Eigen::MatrixXdRef jacobian)
+void ControlRegularization::Update(Eigen::VectorXdRefConst /*x*/, Eigen::VectorXdRefConst u, Eigen::VectorXdRef phi, Eigen::MatrixXdRef /*dphi_dx*/, Eigen::MatrixXdRef dphi_du)
 {
     if (phi.rows() != static_cast<int>(joint_map_.size())) ThrowNamed("Wrong size of Phi!");
-    if (jacobian.rows() != static_cast<int>(joint_map_.size()) || jacobian.cols() != num_controlled_joints_) ThrowNamed("Wrong size of jacobian! " << num_controlled_joints_);
+    if (dphi_du.rows() != static_cast<int>(joint_map_.size()) || dphi_du.cols() != num_controlled_joints_) ThrowNamed("Wrong size of jacobian! " << num_controlled_joints_);
     for (std::size_t i = 0; i < joint_map_.size(); ++i)
     {
-        phi(i) = q(joint_map_[i]) - joint_ref_(i);
-        jacobian(i, joint_map_[i]) = 1.0;
+        phi(i) = u(joint_map_[i]) - joint_ref_(i);
+        dphi_du(i, joint_map_[i]) = 1.0;
     }
 }
 
-void JointPose::Update(Eigen::VectorXdRefConst q, Eigen::VectorXdRef phi, Eigen::MatrixXdRef jacobian, HessianRef hessian)
+void ControlRegularization::Update(Eigen::VectorXdRefConst /*x*/, Eigen::VectorXdRefConst u, Eigen::VectorXdRef phi, Eigen::MatrixXdRef /*dphi_dx*/, Eigen::MatrixXdRef dphi_du, HessianRef /*ddphi_ddx*/, HessianRef ddphi_ddu, HessianRef /*ddphi_dxdu*/)
 {
-    // Hessian is 0
-    Update(q, phi, jacobian);
+    Eigen::VectorXd x_none(1);
+    Eigen::MatrixXd dphi_dx_none(1, 1);
+    Update(x_none, u, phi, dphi_dx_none, dphi_du);
 }
 
-void JointPose::AssignScene(ScenePtr scene)
+void ControlRegularization::AssignScene(ScenePtr scene)
 {
     scene_ = scene;
     Initialize();
 }
 
-void JointPose::Initialize()
+void ControlRegularization::Initialize()
 {
-    num_controlled_joints_ = scene_->GetKinematicTree().GetNumControlledJoints();
+    num_controlled_joints_ = scene_->get_num_controls();
+
+    if (num_controlled_joints_ == 0) ThrowPretty("Not a dynamic scene? Number of controls is 0.");
+
     if (parameters_.JointMap.rows() > 0)
     {
         joint_map_.resize(parameters_.JointMap.rows());
@@ -96,27 +114,19 @@ void JointPose::Initialize()
     }
 }
 
-int JointPose::TaskSpaceDim()
+int ControlRegularization::TaskSpaceDim()
 {
     return joint_map_.size();
 }
 
-const std::vector<int>& JointPose::get_joint_map() const
+const std::vector<int>& ControlRegularization::get_joint_map() const
 {
     return joint_map_;
 }
 
-const Eigen::VectorXd& JointPose::get_joint_ref() const
+const Eigen::VectorXd& ControlRegularization::get_joint_ref() const
 {
     return joint_ref_;
-}
-
-void JointPose::set_joint_ref(Eigen::VectorXdRefConst ref)
-{
-    if (ref.size() == joint_ref_.size())
-        joint_ref_ = ref;
-    else
-        ThrowPretty("Wrong size - expected " << joint_ref_.size() << ", but received " << ref.size());
 }
 
 }  // namespace exotica
