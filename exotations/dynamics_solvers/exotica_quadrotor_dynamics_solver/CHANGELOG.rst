@@ -2,6 +2,12 @@
 Changelog for package exotica_quadrotor_dynamics_solver
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+6.0.0 (2020-11-08)
+------------------
+* CMakeLists: Upgrade minimum version to 3.0.2 to avoid CMP0048
+* Code clean-up
+* Contributors: Wolfgang Merkt
+
 5.1.3 (2020-02-13)
 ------------------
 
