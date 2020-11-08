@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019, University of Edinburgh
+// Copyright (c) 2019-2020, University of Edinburgh, University of Oxford
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,27 +27,29 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#ifndef EXOTICA_DDP_SOLVER_CONTROL_LIMITED_DDP_SOLVER_H_
-#define EXOTICA_DDP_SOLVER_CONTROL_LIMITED_DDP_SOLVER_H_
+#ifndef EXOTICA_DDP_SOLVER_CONTROL_LIMITED_FEASIBILITY_DRIVEN_DDP_SOLVER_H_
+#define EXOTICA_DDP_SOLVER_CONTROL_LIMITED_FEASIBILITY_DRIVEN_DDP_SOLVER_H_
 
-#include <exotica_ddp_solver/abstract_ddp_solver.h>
-#include <exotica_ddp_solver/control_limited_ddp_solver_initializer.h>
-#include <unsupported/Eigen/CXX11/Tensor>
+#include <exotica_ddp_solver/control_limited_feasibility_driven_ddp_solver_initializer.h>
+#include <exotica_ddp_solver/feasibility_driven_ddp_solver.h>
 
 namespace exotica
 {
-// Control-limited DDP solver
-//  Control-limited Differential Dynamic Programming (Tassa, Mansard, Todorov, 2014)
-class ControlLimitedDDPSolver : public AbstractDDPSolver, public Instantiable<ControlLimitedDDPSolverInitializer>
+// Control-limited FDDP solver
+//  A Direct-Indirect Hybridization Approach to Control-Limited DDP (Mastalli, Merkt, Saumell, Sola, Mansard, Vijayakumar, 2020)
+class ControlLimitedFeasibilityDrivenDDPSolver : public AbstractFeasibilityDrivenDDPSolver, public Instantiable<ControlLimitedFeasibilityDrivenDDPSolverInitializer>
 {
 public:
-    void Instantiate(const ControlLimitedDDPSolverInitializer& init) override;
+    void Instantiate(const ControlLimitedFeasibilityDrivenDDPSolverInitializer& init) override;
 
-private:
-    ///\brief Computes the control gains for a the trajectory in the associated
-    ///     DynamicTimeIndexedProblem.
-    void BackwardPass() override;
+protected:
+    void ComputeGains(const int t) override;
+
+    void AllocateData() override;
+    std::vector<Eigen::MatrixXd> Quu_inv_;
+    Eigen::VectorXd du_lb_;
+    Eigen::VectorXd du_ub_;
 };
 }  // namespace exotica
 
-#endif  // EXOTICA_DDP_SOLVER_CONTROL_LIMITED_DDP_SOLVER_H_
+#endif  // EXOTICA_DDP_SOLVER_CONTROL_LIMITED_FEASIBILITY_DRIVEN_DDP_SOLVER_H_
