@@ -1,0 +1,12 @@
+Source: ros-noetic-exotica-ompl-control-solver
+Section: misc
+Priority: optional
+Maintainer: Traiko Dinev <traiko.dinev@ed.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-noetic-catkin, ros-noetic-exotica-core, ros-noetic-ompl
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-noetic-exotica-ompl-control-solver
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-noetic-exotica-core, ros-noetic-ompl
+Description: Kinodynamic Control Solvers from OMPL
