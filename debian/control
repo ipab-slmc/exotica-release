@@ -1,0 +1,13 @@
+Source: ros-noetic-exotica
+Section: misc
+Priority: optional
+Maintainer: Vladimir Ivan <v.ivan@ed.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-noetic-catkin
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-noetic-exotica
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-noetic-exotica-aico-solver, ros-noetic-exotica-collision-scene-fcl-latest, ros-noetic-exotica-core, ros-noetic-exotica-core-task-maps, ros-noetic-exotica-ik-solver, ros-noetic-exotica-levenberg-marquardt-solver, ros-noetic-exotica-ompl-solver, ros-noetic-exotica-python, ros-noetic-exotica-time-indexed-rrt-connect-solver
+Description: The Extensible Optimization Toolset (EXOTica) is a library for defining problems for robot motion planning.
+ This package serves similar to a metapackage and contains dependencies onto all core-released exotica packages. It also builds the documentation.
