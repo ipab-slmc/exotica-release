@@ -2,6 +2,9 @@
 Changelog for package exotica_ddp_solver
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+6.0.1 (2020-11-17)
+------------------
+
 6.0.0 (2020-11-08)
 ------------------
 * FDDP: More verbosity on NaN
