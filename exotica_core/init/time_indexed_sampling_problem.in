@@ -1,0 +1,6 @@
+class TimeIndexedSamplingProblem
+
+extend <exotica_core/sampling_problem>
+
+Required Eigen::VectorXd JointVelocityLimits;
+Required double GoalTime;
