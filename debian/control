@@ -1,0 +1,12 @@
+Source: ros-kinetic-exotica-ilqg-solver
+Section: misc
+Priority: optional
+Maintainer: Traiko Dinev <traiko.dinev@ed.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-kinetic-catkin, ros-kinetic-exotica-core, ros-kinetic-exotica-python
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-kinetic-exotica-ilqg-solver
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-kinetic-exotica-core, ros-kinetic-exotica-python
+Description: ILQG Solver (Todorov and Li, 2004)
