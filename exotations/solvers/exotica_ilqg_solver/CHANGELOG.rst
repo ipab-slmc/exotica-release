@@ -2,6 +2,9 @@
 Changelog for package exotica_ilqg_solver
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+6.0.1 (2020-11-17)
+------------------
+
 6.0.0 (2020-11-08)
 ------------------
 * Use state transition derivatives (`#723 <https://github.com/ipab-slmc/exotica/issues/723>`_)
