@@ -1,0 +1,12 @@
+Source: ros-noetic-exotica-ilqg-solver
+Section: misc
+Priority: optional
+Maintainer: Traiko Dinev <traiko.dinev@ed.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-noetic-catkin, ros-noetic-exotica-core, ros-noetic-exotica-python
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-noetic-exotica-ilqg-solver
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-noetic-exotica-core, ros-noetic-exotica-python
+Description: ILQG Solver (Todorov and Li, 2004)
