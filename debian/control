@@ -1,0 +1,12 @@
+Source: ros-melodic-exotica-python
+Section: misc
+Priority: optional
+Maintainer: Wolfgang Merkt <wolfgang@robots.ox.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-melodic-catkin, ros-melodic-exotica-core, ros-melodic-geometry-msgs, ros-melodic-moveit-msgs, ros-melodic-pybind11-catkin, ros-melodic-shape-msgs
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-melodic-exotica-python
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python-matplotlib, python-pyassimp, python-rospkg, python-tk, ros-melodic-exotica-core, ros-melodic-geometry-msgs, ros-melodic-moveit-msgs, ros-melodic-pybind11-catkin, ros-melodic-shape-msgs
+Description: Python bindings for EXOTica
