@@ -1,0 +1,12 @@
+Source: ros-kinetic-exotica-ik-solver
+Section: misc
+Priority: optional
+Maintainer: Wolfgang Merkt <wolfgang@robots.ox.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-kinetic-catkin, ros-kinetic-exotica-core
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-kinetic-exotica-ik-solver
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-kinetic-exotica-core
+Description: Regularised and weighted pseudo-inverse unconstrained end-pose solver
