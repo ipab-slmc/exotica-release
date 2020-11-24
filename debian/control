@@ -1,0 +1,12 @@
+Source: ros-kinetic-exotica-dynamics-solvers
+Section: misc
+Priority: optional
+Maintainer: Wolfgang Merkt <wolfgang@robots.ox.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-kinetic-catkin
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-kinetic-exotica-dynamics-solvers
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-kinetic-exotica-cartpole-dynamics-solver, ros-kinetic-exotica-double-integrator-dynamics-solver, ros-kinetic-exotica-pendulum-dynamics-solver, ros-kinetic-exotica-pinocchio-dynamics-solver, ros-kinetic-exotica-quadrotor-dynamics-solver
+Description: Metapackage for all dynamics solvers bundled with core EXOTica.
