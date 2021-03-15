@@ -42,9 +42,9 @@ namespace exotica
 class MotionSolver : public Object, Uncopyable, public virtual InstantiableBase
 {
 public:
-    MotionSolver();
+    MotionSolver() = default;
     virtual ~MotionSolver() = default;
-    virtual void InstantiateBase(const Initializer& init);
+    void InstantiateBase(const Initializer& init) override;
     virtual void SpecifyProblem(PlanningProblemPtr pointer);
     virtual void Solve(Eigen::MatrixXd& solution) = 0;
     PlanningProblemPtr GetProblem() const { return problem_; }
@@ -56,6 +56,7 @@ public:
     }
     int GetNumberOfMaxIterations() { return max_iterations_; }
     double GetPlanningTime() { return planning_time_; }
+
 protected:
     PlanningProblemPtr problem_;
     double planning_time_ = -1;
@@ -63,6 +64,6 @@ protected:
 };
 
 typedef std::shared_ptr<exotica::MotionSolver> MotionSolverPtr;
-}
+}  // namespace exotica
 
 #endif  // EXOTICA_CORE_MOTION_SOLVER_H_
