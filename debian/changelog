@@ -1,0 +1,60 @@
+ros-noetic-exotica-python (6.1.0-1buster) buster; urgency=high
+
+  * Fix segmentation fault on exiting Python (#732 <https://github.com/ipab-slmc/exotica/issues/732>)
+  * Upgrade clang format from v3.9 to v6.0 (#730 <https://github.com/ipab-slmc/exotica/issues/730>)
+  * Contributors: Wolfgang Merkt
+
+ -- Wolfgang Merkt <wolfgang@robots.ox.ac.uk>  Mon, 15 Mar 2021 00:00:00 -0000
+
+ros-noetic-exotica-python (6.0.2-1buster) buster; urgency=high
+
+
+
+ -- Wolfgang Merkt <wolfgang@robots.ox.ac.uk>  Mon, 23 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-python (6.0.1-1buster) buster; urgency=high
+
+  * Fix some SparseDDP examples and remove old ones (#728 <https://github.com/ipab-slmc/exotica/issues/728>)
+  * Contributors: Traiko Dinev, Wolfgang Merkt
+
+ -- Wolfgang Merkt <wolfgang@robots.ox.ac.uk>  Tue, 17 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-python (6.0.0-1buster) buster; urgency=high
+
+  * Noetic/20.04 compatibility
+  * More unit testing tools and tests
+  * Expose more features to Python
+  * Fix issues with instantiation from Python using Initializers and tuple lists
+  * Contributors: Matt Timmons-Brown, Traiko Dinev, Vladimir Ivan, Wolfgang Merkt
+
+ -- Wolfgang Merkt <wolfgang@robots.ox.ac.uk>  Sun, 08 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-python (5.1.3-1buster) buster; urgency=high
+
+  * Refactor CollisionScene, add faster distance checks, speedup SmoothCollisionDistance (#688 <https://github.com/ipab-slmc/exotica/issues/688>)
+  * Expose full KinematicTree to Python; expose mesh collision shape information (#686 <https://github.com/ipab-slmc/exotica/issues/686>)
+  * Allow labels/legend in plot()
+  * Contributors: Wolfgang Merkt
+
+ -- Wolfgang Merkt <wolfgang@robots.ox.ac.uk>  Thu, 13 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-python (5.1.2-1buster) buster; urgency=high
+
+
+
+ -- Wolfgang Merkt <wolfgang@robots.ox.ac.uk>  Mon, 10 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-python (5.1.1-1buster) buster; urgency=high
+
+
+
+ -- Wolfgang Merkt <wolfgang@robots.ox.ac.uk>  Mon, 10 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-python (5.1.0-1buster) buster; urgency=high
+
+  * Updates to match code developments and expose more functions
+  * Contributors: Adabotics, Chris Mower, Christian Rauch, Matt Timmons-Brown, Traiko Dinev, Vladimir Ivan, Wolfgang Merkt
+
+ -- Wolfgang Merkt <wolfgang@robots.ox.ac.uk>  Fri, 31 Jan 2020 00:00:00 -0000
+
+
