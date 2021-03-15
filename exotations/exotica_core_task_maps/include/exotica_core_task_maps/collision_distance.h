@@ -49,6 +49,7 @@ public:
     int TaskSpaceDim() override;
 
     std::vector<CollisionProxy> get_collision_proxies() { return closest_proxies_; }
+
 private:
     void Initialize();
 
@@ -62,7 +63,7 @@ private:
     int dim_;
     CollisionScenePtr cscene_;
 
-    void Update(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, Eigen::MatrixXdRef J, bool updateJacobian = true);
+    void UpdateInternal(Eigen::VectorXdRefConst x, Eigen::VectorXdRef phi, Eigen::MatrixXdRef J, bool updateJacobian = true);
 };
 }  // namespace exotica
 
