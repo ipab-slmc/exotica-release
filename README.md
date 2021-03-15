@@ -1,3 +1,48 @@
+## exotica (melodic) - 6.1.0-1
+
+The packages in the `exotica` repository were released into the `melodic` distro by running `/usr/bin/bloom-release -r melodic exotica` on `Mon, 15 Mar 2021 17:58:49 -0000`
+
+These packages were released:
+- `exotica`
+- `exotica_aico_solver`
+- `exotica_cartpole_dynamics_solver`
+- `exotica_collision_scene_fcl_latest`
+- `exotica_core`
+- `exotica_core_task_maps`
+- `exotica_ddp_solver`
+- `exotica_double_integrator_dynamics_solver`
+- `exotica_dynamics_solvers`
+- `exotica_examples`
+- `exotica_ik_solver`
+- `exotica_ilqg_solver`
+- `exotica_ilqr_solver`
+- `exotica_levenberg_marquardt_solver`
+- `exotica_ompl_control_solver`
+- `exotica_ompl_solver`
+- `exotica_pendulum_dynamics_solver`
+- `exotica_pinocchio_dynamics_solver`
+- `exotica_python`
+- `exotica_quadrotor_dynamics_solver`
+- `exotica_scipy_solver`
+- `exotica_time_indexed_rrt_connect_solver`
+
+Version of package(s) in repository `exotica`:
+
+- upstream repository: https://github.com/ipab-slmc/exotica.git
+- release repository: https://github.com/ipab-slmc/exotica-release.git
+- rosdistro version: `6.0.2-1`
+- old version: `6.0.2-1`
+- new version: `6.1.0-1`
+
+Versions of tools used:
+
+- bloom version: `0.10.2`
+- catkin_pkg version: `0.4.23`
+- rosdep version: `0.20.0`
+- rosdistro version: `0.8.3`
+- vcstools version: `0.1.42`
+
+
 ## exotica (noetic) - 6.1.0-1
 
 The packages in the `exotica` repository were released into the `noetic` distro by running `/usr/bin/bloom-release -r noetic exotica` on `Mon, 15 Mar 2021 17:50:33 -0000`
