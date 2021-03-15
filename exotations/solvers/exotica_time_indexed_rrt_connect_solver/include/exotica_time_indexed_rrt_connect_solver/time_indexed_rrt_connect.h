@@ -170,7 +170,7 @@ public:
         tGoal_.reset(new NN<Motion *>());
     }
 
-    virtual void setup();
+    void setup() override;
 
 protected:
     /// \brief Representation of a motion
@@ -299,6 +299,6 @@ protected:
 
     bool reverse_check_;
 };
-}
+}  // namespace exotica
 
 #endif  // TIME_INDEXED_RRT_CONNECT_SOLVER_TIME_INDEXED_RRT_CONNECT_H_
