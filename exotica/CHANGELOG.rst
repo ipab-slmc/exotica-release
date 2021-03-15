@@ -2,6 +2,13 @@
 Changelog for package exotica
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+6.1.0 (2021-03-15)
+------------------
+* [exotica] Adjust version for documentation
+* [exotica] Update installation.rst instructions
+* Upgrade clang format from v3.9 to v6.0 (`#730 <https://github.com/ipab-slmc/exotica/issues/730>`_)
+* Contributors: Wolfgang Merkt
+
 6.0.2 (2020-11-23)
 ------------------
 
