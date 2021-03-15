@@ -1,0 +1,57 @@
+ros-noetic-exotica-ilqg-solver (6.1.0-1focal) focal; urgency=high
+
+  * Upgrade clang format from v3.9 to v6.0 (#730 <https://github.com/ipab-slmc/exotica/issues/730>)
+  * Contributors: Wolfgang Merkt
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Mon, 15 Mar 2021 00:00:00 -0000
+
+ros-noetic-exotica-ilqg-solver (6.0.2-1focal) focal; urgency=high
+
+
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Mon, 23 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-ilqg-solver (6.0.1-1focal) focal; urgency=high
+
+
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Tue, 17 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-ilqg-solver (6.0.0-1focal) focal; urgency=high
+
+  * Use state transition derivatives (#723 <https://github.com/ipab-slmc/exotica/issues/723>)
+  * CMakeLists: Upgrade minimum version to 3.0.2 to avoid CMP0048 (#720 <https://github.com/ipab-slmc/exotica/issues/720>)
+  * Upgrade get_num_positions etc. (#723 <https://github.com/ipab-slmc/exotica/issues/723>)
+  * Use DynamicsSolver::ComputeDerivatives (#723 <https://github.com/ipab-slmc/exotica/issues/723>)
+  * Move costs from Solver to Problem (#723 <https://github.com/ipab-slmc/exotica/issues/723>)
+  * Numerous bug fixes (#723 <https://github.com/ipab-slmc/exotica/issues/723>)
+  * Contributors: Traiko Dinev, Wolfgang Merkt
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Sun, 08 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-ilqg-solver (5.1.3-1focal) focal; urgency=high
+
+
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Thu, 13 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-ilqg-solver (5.1.2-1focal) focal; urgency=high
+
+
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Mon, 10 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-ilqg-solver (5.1.1-1focal) focal; urgency=high
+
+
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Mon, 10 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-ilqg-solver (5.1.0-1focal) focal; urgency=high
+
+  * Added exotica_ilqg_solver
+  * Contributors: Traiko Dinev, Wolfgang Merkt
+
+ -- Traiko Dinev <traiko.dinev@ed.ac.uk>  Fri, 31 Jan 2020 00:00:00 -0000
+
+
