@@ -41,10 +41,6 @@ void MotionSolver::InstantiateBase(const Initializer& init)
     SetNumberOfMaxIterations(MotionSolverInitializer(init).MaxIterations);
 }
 
-MotionSolver::MotionSolver()
-{
-}
-
 void MotionSolver::SpecifyProblem(PlanningProblemPtr pointer)
 {
     problem_ = pointer;
@@ -57,4 +53,4 @@ std::string MotionSolver::Print(const std::string& prepend) const
     if (problem_) ret += "\n" + problem_->Print(prepend + "    ");
     return ret;
 }
-}
+}  // namespace exotica
