@@ -1,1 +1,1 @@
-{"trim": "", "base": "0b2225c8", "trimbase": "", "parent": "debian/melodic/exotica_quadrotor_dynamics_solver", "previous": "75d81932"}
+{"base": "67a13166", "parent": "debian/melodic/exotica_quadrotor_dynamics_solver", "previous": "c479f628", "trim": "", "trimbase": ""}
