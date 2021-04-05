@@ -1,0 +1,68 @@
+ros-noetic-exotica-examples (6.1.1-1focal) focal; urgency=high
+
+  * Fix broken examples (#736 <https://github.com/ipab-slmc/exotica/issues/736>)
+  * Fix unit tests on Debian Buster (#734 <https://github.com/ipab-slmc/exotica/issues/734>)
+  * Fix test robot URDF with collision links for ROS Noetic
+  * Python 3 fixes
+  * Contributors: Wolfgang Merkt
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Sun, 04 Apr 2021 23:00:00 -0000
+
+ros-noetic-exotica-examples (6.1.0-1focal) focal; urgency=high
+
+  * Fix TargetMarker
+  * Fix segmentation fault on exiting Python (#732 <https://github.com/ipab-slmc/exotica/issues/732>)
+  * Remove explicit specification of Integrator
+  * Upgrade clang format from v3.9 to v6.0 (#730 <https://github.com/ipab-slmc/exotica/issues/730>)
+  * Contributors: Wolfgang Merkt
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Mon, 15 Mar 2021 00:00:00 -0000
+
+ros-noetic-exotica-examples (6.0.2-1focal) focal; urgency=high
+
+
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Mon, 23 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-examples (6.0.1-1focal) focal; urgency=high
+
+  * Fix some SparseDDP examples and remove old ones (#728 <https://github.com/ipab-slmc/exotica/issues/728>)
+  * Contributors: Traiko Dinev, Wolfgang Merkt
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Tue, 17 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-examples (6.0.0-1focal) focal; urgency=high
+
+  * Add new examples for sparsity-inducing optimal control and fix optimal control examples
+  * Add unit tests
+  * Add example for Dubin's state space
+  * Contributors: Traiko Dinev, Vladimir Ivan, Wolfgang Merkt
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Sun, 08 Nov 2020 00:00:00 -0000
+
+ros-noetic-exotica-examples (5.1.3-1focal) focal; urgency=high
+
+
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Thu, 13 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-examples (5.1.2-1focal) focal; urgency=high
+
+
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Mon, 10 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-examples (5.1.1-1focal) focal; urgency=high
+
+
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Mon, 10 Feb 2020 00:00:00 -0000
+
+ros-noetic-exotica-examples (5.1.0-1focal) focal; urgency=high
+
+  * Lots more examples!
+  * Contributors: Chris Mower, Christian Rauch, Traiko Dinev, Vladimir Ivan, Wolfgang Merkt
+
+ -- Vladimir Ivan <v.ivan@ed.ac.uk>  Fri, 31 Jan 2020 00:00:00 -0000
+
+
