@@ -1,0 +1,12 @@
+Source: ros-noetic-exotica-core
+Section: misc
+Priority: optional
+Maintainer: Vladimir Ivan <v.ivan@ed.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), libmsgpack-dev, libtinyxml2-dev, libzmq3-dev, ros-noetic-catkin, ros-noetic-cmake-modules, ros-noetic-eigen-conversions, ros-noetic-geometry-msgs, ros-noetic-kdl-parser, ros-noetic-moveit-core, ros-noetic-moveit-msgs, ros-noetic-moveit-ros-planning, ros-noetic-pluginlib, ros-noetic-roscpp, ros-noetic-rosunit, ros-noetic-std-msgs, ros-noetic-tf, ros-noetic-tf-conversions
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-noetic-exotica-core
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libmsgpack-dev, liborocos-kdl-dev, liborocos-kdl1.4, libtinyxml2-dev, libzmq3-dev, ros-noetic-eigen-conversions, ros-noetic-geometry-msgs, ros-noetic-kdl-parser, ros-noetic-moveit-core, ros-noetic-moveit-msgs, ros-noetic-moveit-ros-planning, ros-noetic-pluginlib, ros-noetic-roscpp, ros-noetic-std-msgs, ros-noetic-tf, ros-noetic-tf-conversions
+Description: The Extensible Optimization Toolset (EXOTica) is a library for defining problems for robot motion planning.
