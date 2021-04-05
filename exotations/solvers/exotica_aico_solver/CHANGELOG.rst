@@ -2,6 +2,9 @@
 Changelog for package exotica_aico_solver
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+6.1.1 (2021-04-05)
+------------------
+
 6.1.0 (2021-03-15)
 ------------------
 * Clang support and bug fixes (`#731 <https://github.com/ipab-slmc/exotica/issues/731>`_)
