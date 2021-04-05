@@ -1,0 +1,12 @@
+Source: ros-melodic-exotica-core-task-maps
+Section: misc
+Priority: optional
+Maintainer: Vladimir Ivan <v.ivan@ed.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-melodic-catkin, ros-melodic-eigen-conversions, ros-melodic-exotica-collision-scene-fcl-latest, ros-melodic-exotica-core, ros-melodic-exotica-python, ros-melodic-geometry-msgs, ros-melodic-rosunit
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-melodic-exotica-core-task-maps
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-melodic-exotica-core, ros-melodic-exotica-python, ros-melodic-geometry-msgs
+Description: Common taskmaps provided with EXOTica.
