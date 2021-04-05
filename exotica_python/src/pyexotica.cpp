@@ -40,6 +40,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <octomap/OcTree.h>
 #include <ros/package.h>
 
 #include <unsupported/Eigen/CXX11/Tensor>
@@ -174,12 +175,12 @@ void AddInitializers(py::module& module)
     py::module inits = module.def_submodule("Initializers", "Initializers for core EXOTica classes.");
     inits.def("Initializer", &CreateInitializer);
     std::vector<Initializer> initializers = Setup::GetInitializers();
-    for (Initializer& i : initializers)
+    for (const Initializer& i : initializers)
     {
-        std::string full_name = i.GetName();
-        std::string name = full_name.substr(8);  // This removes the prefix "exotica/"
+        const std::string full_name = i.GetName();
+        const std::string name = full_name.substr(8);  // This removes the prefix "exotica/"
         known_initializers[full_name] = CreateInitializer(i);
-        inits.def((name + "Initializer").c_str(), [i]() { return CreateInitializer(i); }, (name + "Initializer constructor.").c_str());
+        inits.def((name + "Initializer").c_str(), [full_name]() { return CreateInitializer(known_initializers[full_name]); }, (name + "Initializer constructor.").c_str());
     }
 
     inits.def("load_xml", (Initializer(*)(std::string, bool)) & XMLLoader::Load, "Loads initializer from XML", py::arg("xml"), py::arg("parseAsXMLString") = false);
@@ -663,8 +664,8 @@ public:
         return hessian_array<Hessian::Scalar::Scalar>(src);
     }
 };
-}
-}  // namespace pybind11::detail
+}  // namespace detail
+}  // namespace pybind11
 
 PYBIND11_MODULE(_pyexotica, module)
 {
@@ -887,7 +888,8 @@ PYBIND11_MODULE(_pyexotica, module)
         .def("set_goal", &EndPoseTask::SetGoal)
         .def("get_goal", &EndPoseTask::GetGoal)
         .def("set_rho", &EndPoseTask::SetRho)
-        .def("get_rho", &EndPoseTask::GetRho);
+        .def("get_rho", &EndPoseTask::GetRho)
+        .def("get_S", &EndPoseTask::GetS);
 
     py::class_<SamplingTask, std::shared_ptr<SamplingTask>>(module, "SamplingTask")
         .def_readonly("length_Phi", &SamplingTask::length_Phi)
@@ -1131,6 +1133,7 @@ PYBIND11_MODULE(_pyexotica, module)
     sampling_problem.def("set_rho_neq", &SamplingProblem::SetRhoNEQ);
     sampling_problem.def("get_goal_neq", &SamplingProblem::GetGoalNEQ);
     sampling_problem.def("get_rho_neq", &SamplingProblem::GetRhoNEQ);
+    sampling_problem.def("is_state_valid", &SamplingProblem::IsStateValid);
 
     py::class_<TimeIndexedSamplingProblem, std::shared_ptr<TimeIndexedSamplingProblem>, PlanningProblem> time_indexed_sampling_problem(prob, "TimeIndexedSamplingProblem");
     time_indexed_sampling_problem.def("update", &TimeIndexedSamplingProblem::Update);
@@ -1588,6 +1591,7 @@ PYBIND11_MODULE(_pyexotica, module)
     AddInitializers(module);
 
     auto cleanup_exotica = []() {
+        known_initializers.clear();
         Setup::Destroy();
     };
     module.add_object("_cleanup", py::capsule(cleanup_exotica));
