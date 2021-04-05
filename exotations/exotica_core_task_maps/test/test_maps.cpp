@@ -31,50 +31,12 @@
 #include <ros/ros.h>
 
 #include <exotica_core/exotica_core.h>
+#include <exotica_core/tools/test_helpers.h>
 
 // TODO(#437): Activate once solution for pointer casting/dynamic loading is found.
 // #include <exotica_core_task_maps/JointAccelerationBackwardDifference.h>
 // #include <exotica_core_task_maps/JointJerkBackwardDifference.h>
 // #include <exotica_core_task_maps/JointVelocityBackwardDifference.h>
-
-// Extend testing printout //////////////////////
-
-namespace testing
-{
-namespace internal
-{
-#if !ROS_VERSION_MINIMUM(1, 15, 0)
-enum GTestColor
-{
-    COLOR_DEFAULT,
-    COLOR_RED,
-    COLOR_GREEN,
-    COLOR_YELLOW
-};
-#endif
-extern void ColoredPrintf(testing::internal::GTestColor color, const char* fmt, ...);
-}
-}
-#define PRINTF(...)                                                                        \
-    do                                                                                     \
-    {                                                                                      \
-        testing::internal::ColoredPrintf(testing::internal::COLOR_GREEN, "[          ] "); \
-        testing::internal::ColoredPrintf(testing::internal::COLOR_YELLOW, __VA_ARGS__);    \
-    } while (0)
-
-// C++ stream interface
-class TestCout : public std::stringstream
-{
-public:
-    ~TestCout()
-    {
-        PRINTF("%s\n", str().c_str());
-    }
-};
-
-#define TEST_COUT TestCout()
-
-//////////////////////////////////////////////
 
 using namespace exotica;
 
@@ -539,6 +501,40 @@ TEST(ExoticaTaskMaps, testDistance)
 
         EXPECT_TRUE(test_jacobian(problem));
         EXPECT_TRUE(test_hessian(problem, 1e-2));
+    }
+    catch (const std::exception& e)
+    {
+        ADD_FAILURE() << "Uncaught exception! " << e.what();
+    }
+}
+
+TEST(ExoticaTaskMaps, testDistanceToLine2D)
+{
+    try
+    {
+        // Fixed frames build line
+        {
+            TEST_COUT << "DistanceToLine2D test: Fixed frames";
+            Initializer map("exotica/DistanceToLine2D", {{"Name", std::string("MyTask")},
+                                                         {"EndEffector", std::vector<Initializer>({Initializer("Frame", {{"Link", std::string("base")}, {"BaseOffset", std::string("-0.5 -0.5 0")}}),
+                                                                                                   Initializer("Frame", {{"Link", std::string("base")}, {"BaseOffset", std::string("0.5 0.5 0")}}),
+                                                                                                   Initializer("Frame", {{"Link", std::string("endeff")}})})}});
+            UnconstrainedEndPoseProblemPtr problem = setup_problem(map);
+            EXPECT_TRUE(test_random(problem));
+            EXPECT_TRUE(test_jacobian(problem));
+        }
+
+        // Robot (moving) frames build line
+        {
+            TEST_COUT << "DistanceToLine2D test: Moving links";
+            Initializer map("exotica/DistanceToLine2D", {{"Name", std::string("MyTask")},
+                                                         {"EndEffector", std::vector<Initializer>({Initializer("Frame", {{"Link", std::string("link1")}}),
+                                                                                                   Initializer("Frame", {{"Link", std::string("link3")}}),
+                                                                                                   Initializer("Frame", {{"Link", std::string("endeff")}})})}});
+            UnconstrainedEndPoseProblemPtr problem = setup_problem(map);
+            EXPECT_TRUE(test_random(problem));
+            EXPECT_TRUE(test_jacobian(problem));
+        }
     }
     catch (const std::exception& e)
     {
