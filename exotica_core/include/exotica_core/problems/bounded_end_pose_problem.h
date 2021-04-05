@@ -44,7 +44,7 @@ public:
     BoundedEndPoseProblem();
     virtual ~BoundedEndPoseProblem();
 
-    virtual void Instantiate(const BoundedEndPoseProblemInitializer& init);
+    void Instantiate(const BoundedEndPoseProblemInitializer& init) override;
     void Update(Eigen::VectorXdRefConst x);
 
     void SetGoal(const std::string& task_name, Eigen::VectorXdRefConst goal);
@@ -72,6 +72,6 @@ public:
     int num_tasks;
 };
 typedef std::shared_ptr<exotica::BoundedEndPoseProblem> BoundedEndPoseProblemPtr;
-}
+}  // namespace exotica
 
 #endif  // EXOTICA_CORE_BOUNDED_END_POSE_PROBLEM_H_
