@@ -43,7 +43,7 @@ public:
     UnconstrainedEndPoseProblem();
     virtual ~UnconstrainedEndPoseProblem();
 
-    virtual void Instantiate(const UnconstrainedEndPoseProblemInitializer& init);
+    void Instantiate(const UnconstrainedEndPoseProblemInitializer& init) override;
     void Update(Eigen::VectorXdRefConst x);
 
     bool IsValid() override { return true; }
@@ -79,6 +79,6 @@ public:
     int num_tasks;
 };
 typedef std::shared_ptr<exotica::UnconstrainedEndPoseProblem> UnconstrainedEndPoseProblemPtr;
-}
+}  // namespace exotica
 
 #endif  // EXOTICA_CORE_UNCONSTRAINED_END_POSE_PROBLEM_H_
