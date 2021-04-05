@@ -41,9 +41,17 @@
 #include <exotica_core/tools/uncopyable.h>
 #include <exotica_core/version.h>
 
-#include <geometric_shapes/shapes.h>
-#include <octomap/OcTree.h>
 #include <std_msgs/ColorRGBA.h>
+
+// Forward declarations
+namespace octomap
+{
+class OcTree;
+}
+namespace shapes
+{
+class Shape;
+}
 
 /**
  * \brief A double-wrapper MACRO functionality for generating unique object names: The actual functionality is provided by EX_UNIQ (for 'exotica unique')
@@ -120,7 +128,7 @@ enum ArgumentPosition
     ARG3 = 3,
     ARG4 = 4
 };
-}
+}  // namespace exotica
 
 namespace
 {
@@ -134,7 +142,7 @@ struct Holder
     Holder(Holder&& other) : p(std::move(other.p)) {}
     void operator()(...) { p.reset(); }
 };
-}
+}  // namespace
 
 template <class T>
 std::shared_ptr<T> ToStdPtr(const boost::shared_ptr<T>& p)
