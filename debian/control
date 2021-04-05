@@ -1,0 +1,12 @@
+Source: ros-melodic-exotica-ik-solver
+Section: misc
+Priority: optional
+Maintainer: Wolfgang Merkt <wolfgang@robots.ox.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-melodic-catkin, ros-melodic-exotica-core
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-melodic-exotica-ik-solver
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-melodic-exotica-core
+Description: Regularised and weighted pseudo-inverse unconstrained end-pose solver
