@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018, University of Edinburgh
+// Copyright (c) 2021, University of Oxford
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,37 +27,24 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 
-#ifndef EXOTICA_CORE_TASK_SPACE_VECTOR_H_
-#define EXOTICA_CORE_TASK_SPACE_VECTOR_H_
+#ifndef EXOTICA_CORE_TEST_HELPERS_H_
+#define EXOTICA_CORE_TEST_HELPERS_H_
 
-#include <exotica_core/tools/conversions.h>
-#include <Eigen/Dense>
-#include <kdl/frames.hpp>
-#include <vector>
+#include <iostream>
 
 namespace exotica
 {
-struct TaskVectorEntry
+// C++ stream interface
+class TestCout : public std::stringstream
 {
-    RotationType type = RotationType::RPY;
-    int id = 0;
-
-    TaskVectorEntry();
-    TaskVectorEntry(int _id, RotationType _type);
-    static std::vector<TaskVectorEntry> reindex(const std::vector<TaskVectorEntry>& _map, int _old_start, int _new_start);
-};
-
-struct TaskSpaceVector
-{
-    TaskSpaceVector();
-    ~TaskSpaceVector();
-    TaskSpaceVector& operator=(std::initializer_list<double> other);
-    Eigen::VectorXd operator-(const TaskSpaceVector& other);
-    void SetZero(const int n);
-
-    Eigen::VectorXd data;
-    std::vector<TaskVectorEntry> map;
+public:
+    ~TestCout()
+    {
+        std::cout << "\033[32m[          ]\033[0m \033[35m" << str().c_str() << "\033[0m" << std::endl;
+    }
 };
 }  // namespace exotica
 
-#endif  // EXOTICA_CORE_TASK_SPACE_VECTOR_H_
+#define TEST_COUT TestCout()
+
+#endif  // EXOTICA_CORE_TEST_HELPERS_H_
