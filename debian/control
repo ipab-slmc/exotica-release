@@ -1,0 +1,12 @@
+Source: ros-kinetic-exotica-examples
+Section: misc
+Priority: optional
+Maintainer: Vladimir Ivan <v.ivan@ed.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-kinetic-catkin, ros-kinetic-exotica-aico-solver, ros-kinetic-exotica-core, ros-kinetic-exotica-core-task-maps, ros-kinetic-exotica-ik-solver, ros-kinetic-exotica-val-description, ros-kinetic-rostest, ros-kinetic-rosunit, ros-kinetic-sensor-msgs
+Homepage: https://github.com/ipab-slmc/exotica
+Standards-Version: 3.9.2
+
+Package: ros-kinetic-exotica-examples
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-kinetic-exotica-aico-solver, ros-kinetic-exotica-cartpole-dynamics-solver, ros-kinetic-exotica-collision-scene-fcl-latest, ros-kinetic-exotica-core, ros-kinetic-exotica-core-task-maps, ros-kinetic-exotica-ddp-solver, ros-kinetic-exotica-double-integrator-dynamics-solver, ros-kinetic-exotica-ik-solver, ros-kinetic-exotica-ilqg-solver, ros-kinetic-exotica-ilqr-solver, ros-kinetic-exotica-levenberg-marquardt-solver, ros-kinetic-exotica-ompl-control-solver, ros-kinetic-exotica-ompl-solver, ros-kinetic-exotica-pendulum-dynamics-solver, ros-kinetic-exotica-pinocchio-dynamics-solver, ros-kinetic-exotica-python, ros-kinetic-exotica-quadrotor-dynamics-solver, ros-kinetic-exotica-scipy-solver, ros-kinetic-exotica-time-indexed-rrt-connect-solver, ros-kinetic-geometry-msgs, ros-kinetic-interactive-markers, ros-kinetic-robot-state-publisher, ros-kinetic-rviz, ros-kinetic-sensor-msgs, ros-kinetic-visualization-msgs
+Description: Package containing examples and system tests for EXOTica.
