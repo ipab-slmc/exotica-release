@@ -43,10 +43,10 @@ public:
     SamplingProblem();
     virtual ~SamplingProblem();
 
-    virtual void Instantiate(const SamplingProblemInitializer& init);
+    void Instantiate(const SamplingProblemInitializer& init) override;
 
     void Update(Eigen::VectorXdRefConst x);
-    bool IsValid(Eigen::VectorXdRefConst x);  // Not overriding on purpose - this updates and calls IsValid
+    bool IsStateValid(Eigen::VectorXdRefConst x);
     bool IsValid() override;
     void PreUpdate() override;
 
@@ -81,6 +81,6 @@ private:
 };
 
 typedef std::shared_ptr<exotica::SamplingProblem> SamplingProblemPtr;
-}
+}  // namespace exotica
 
 #endif  // EXOTICA_CORE_SAMPLING_PROBLEM_H_
