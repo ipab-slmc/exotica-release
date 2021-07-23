@@ -1,0 +1,12 @@
+Source: ros-noetic-exotica-ompl-solver
+Section: misc
+Priority: optional
+Maintainer: Wolfgang Merkt <wolfgang@robots.ox.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-noetic-catkin, ros-noetic-exotica-core, ros-noetic-exotica-python, ros-noetic-ompl
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-noetic-exotica-ompl-solver
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-noetic-exotica-core, ros-noetic-exotica-python, ros-noetic-ompl
+Description: Exotica solvers based on the Open Motion Planning Libary (OMPL)
