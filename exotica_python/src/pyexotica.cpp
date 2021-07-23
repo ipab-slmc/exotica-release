@@ -884,12 +884,13 @@ PYBIND11_MODULE(_pyexotica, module)
         .def_readonly("S", &EndPoseTask::S)
         .def_readonly("tasks", &EndPoseTask::tasks)
         .def_readonly("task_maps", &EndPoseTask::task_maps)
+        .def("get_S", &EndPoseTask::GetS)
         .def("get_task_error", &EndPoseTask::GetTaskError)
+        .def("get_task_jacobian", &EndPoseTask::GetTaskJacobian)
         .def("set_goal", &EndPoseTask::SetGoal)
         .def("get_goal", &EndPoseTask::GetGoal)
         .def("set_rho", &EndPoseTask::SetRho)
-        .def("get_rho", &EndPoseTask::GetRho)
-        .def("get_S", &EndPoseTask::GetS);
+        .def("get_rho", &EndPoseTask::GetRho);
 
     py::class_<SamplingTask, std::shared_ptr<SamplingTask>>(module, "SamplingTask")
         .def_readonly("length_Phi", &SamplingTask::length_Phi)
@@ -1298,6 +1299,11 @@ PYBIND11_MODULE(_pyexotica, module)
     scene.def("hessian", [](Scene* instance, const std::string& e1) { return instance->GetKinematicTree().Hessian(e1, KDL::Frame(), "", KDL::Frame()); });
     scene.def("add_trajectory_from_file", &Scene::AddTrajectoryFromFile);
     scene.def("add_trajectory", (void (Scene::*)(const std::string&, const std::string&)) & Scene::AddTrajectory);
+    scene.def("add_trajectory_from_array",
+              [](Scene* instance, const std::string& link, const Eigen::MatrixXd& data, double radius) {
+                  instance->AddTrajectory(link, std::shared_ptr<Trajectory>(new Trajectory(data, radius)));
+              },
+              py::arg("link"), py::arg("data"), py::arg("radius"));
     scene.def("get_trajectory", [](Scene* instance, const std::string& link) { return instance->GetTrajectory(link)->ToString(); });
     scene.def("remove_trajectory", &Scene::RemoveTrajectory);
     scene.def("update_scene_frames", &Scene::UpdateSceneFrames);
@@ -1466,7 +1472,7 @@ PYBIND11_MODULE(_pyexotica, module)
         .def_property("integrator", &DynamicsSolver::get_integrator, &DynamicsSolver::set_integrator)
         .def("get_position", &DynamicsSolver::GetPosition)
         .def("simulate", &DynamicsSolver::Simulate)
-        .def("state_delta", &DynamicsSolver::StateDelta)
+        .def("state_delta", (Eigen::VectorXd(DynamicsSolver::*)(const Eigen::VectorXd&, const Eigen::VectorXd&)) & DynamicsSolver::StateDelta)
         .def("state_delta_derivative", &DynamicsSolver::dStateDelta)
         .def("state_delta_second_derivative", &DynamicsSolver::ddStateDelta)
         .def("compute_derivatives", &DynamicsSolver::ComputeDerivatives)
