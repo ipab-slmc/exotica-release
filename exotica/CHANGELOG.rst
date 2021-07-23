@@ -2,6 +2,11 @@
 Changelog for package exotica
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+6.2.0 (2021-07-23)
+------------------
+* Replace dead link
+* Contributors: Wolfgang Merkt
+
 6.1.1 (2021-04-05)
 ------------------
 * [exotica] Update version to 6.1.1 for documentation
