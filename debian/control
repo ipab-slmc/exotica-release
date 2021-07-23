@@ -1,0 +1,12 @@
+Source: ros-melodic-exotica-collision-scene-fcl-latest
+Section: misc
+Priority: optional
+Maintainer: Wolfgang Merkt <wolfgang@robots.ox.ac.uk>
+Build-Depends: debhelper (>= 9.0.0), ros-melodic-catkin, ros-melodic-exotica-core, ros-melodic-fcl-catkin, ros-melodic-geometric-shapes
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-melodic-exotica-collision-scene-fcl-latest
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-melodic-exotica-core, ros-melodic-fcl-catkin, ros-melodic-geometric-shapes
+Description: Collision checking and distance computation using the latest version of the FCL library.
