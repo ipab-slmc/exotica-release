@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>exotica_collision_scene_fcl_latest</name>
-  <version>6.1.1</version>
+  <version>6.2.0</version>
   <description>Collision checking and distance computation using the latest version of the FCL library.</description>
   <maintainer email="wolfgang@robots.ox.ac.uk">Wolfgang Merkt</maintainer>
   <maintainer email="v.ivan@ed.ac.uk">Vladimir Ivan</maintainer>
@@ -11,7 +11,9 @@
   <buildtool_depend>catkin</buildtool_depend>
   <depend>exotica_core</depend>
   <depend>geometric_shapes</depend>
-  <depend>fcl_catkin</depend>
+
+  <depend condition="$ROS_DISTRO != 'noetic'">fcl_catkin</depend>
+  <depend condition="$ROS_DISTRO == 'noetic'">fcl</depend>
 
   <export>
     <exotica_core plugin="${prefix}/exotica_plugins.xml" />
