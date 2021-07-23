@@ -2,6 +2,9 @@
 Changelog for package exotica_ompl_solver
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+6.2.0 (2021-07-23)
+------------------
+
 6.1.1 (2021-04-05)
 ------------------
 * SamplingProblem: Rename IsValid(q) to IsStateValid(q) (`#736 <https://github.com/ipab-slmc/exotica/issues/736>`_)
